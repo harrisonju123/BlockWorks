@@ -19,6 +19,8 @@ dependencies = [
     "typer>=0.15",
     "rich>=13.0",
     "httpx>=0.28",
+    "scipy>=1.14",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +52,7 @@ asyncio_mode = "auto"
 addopts = "-ra -q"
 markers = [
     "integration: tests requiring Docker (TimescaleDB testcontainer)",
+    "framework: tests requiring live LiteLLM proxy and framework SDKs (langchain, crewai)",
 ]
 
 [tool.ruff]

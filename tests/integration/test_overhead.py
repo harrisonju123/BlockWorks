@@ -1,46 +1,34 @@
 """Overhead benchmark: measure callback enqueue latency.
 
 The callback should only enqueue events, never awaiting DB writes
-on the hot path. This test verifies P95 latency stays under 8ms
-for 1000 calls, proving the callback doesn't add meaningful
-latency to the LLM request path.
+on the hot path. This test verifies P95 latency stays under the
+threshold, proving the callback doesn't add meaningful latency.
 """
 
 from __future__ import annotations
 
+import os
 import statistics
 import time
 
 import asyncpg
 import pytest
 
-from agentproof.pipeline.callback import AgentProofCallback
-
-from .conftest import make_litellm_kwargs
+from .conftest import make_callback, make_litellm_kwargs
 
 pytestmark = pytest.mark.integration
 
 NUM_CALLS = 1000
-P95_THRESHOLD_MS = 8.0
+P95_THRESHOLD_MS = float(os.environ.get("BENCH_P95_THRESHOLD_MS", "8.0"))
 
 
-@pytest.fixture
-def callback(db_url: str, _apply_schema) -> AgentProofCallback:
-    return AgentProofCallback(
-        db_url=db_url,
-        org_id="bench-org",
-        enable_classification=True,
-        batch_size=100,
-        flush_interval_ms=200,
-    )
-
-
-async def test_enqueue_latency(callback: AgentProofCallback, clean_db: asyncpg.Pool):
+async def test_enqueue_latency(db_url: str, _apply_schema, clean_db: asyncpg.Pool):
     """Measure async_log_success_event latency over 1000 calls.
 
     Only the enqueue portion is on the critical path. The background
-    writer drains the queue independently. We assert P95 < 8ms.
+    writer drains the queue independently.
     """
+    callback = make_callback(db_url, org_id="bench-org", batch_size=100, flush_interval_ms=200)
     kwargs, response_obj, start_time, end_time = make_litellm_kwargs()
     latencies_ms: list[float] = []
 
@@ -58,7 +46,6 @@ async def test_enqueue_latency(callback: AgentProofCallback, clean_db: asyncpg.P
     p99 = latencies_ms[p99_idx]
     mean = statistics.mean(latencies_ms)
 
-    # Report for visibility in test output
     print(f"\n--- Callback overhead benchmark ({NUM_CALLS} calls) ---")
     print(f"  Mean:  {mean:.3f} ms")
     print(f"  P50:   {p50:.3f} ms")
@@ -73,16 +60,12 @@ async def test_enqueue_latency(callback: AgentProofCallback, clean_db: asyncpg.P
     )
 
 
-async def test_classification_disabled_is_faster(db_url: str, _apply_schema, clean_db: asyncpg.Pool):
-    """Sanity check that disabling classification reduces per-call cost."""
+async def test_both_modes_under_threshold(db_url: str, _apply_schema, clean_db: asyncpg.Pool):
+    """Both classification-enabled and disabled modes stay under threshold."""
     kwargs, response_obj, start_time, end_time = make_litellm_kwargs()
 
-    cb_with = AgentProofCallback(
-        db_url=db_url, enable_classification=True, batch_size=100, flush_interval_ms=200,
-    )
-    cb_without = AgentProofCallback(
-        db_url=db_url, enable_classification=False, batch_size=100, flush_interval_ms=200,
-    )
+    cb_with = make_callback(db_url, enable_classification=True, batch_size=100, flush_interval_ms=200)
+    cb_without = make_callback(db_url, enable_classification=False, batch_size=100, flush_interval_ms=200)
 
     latencies_with: list[float] = []
     latencies_without: list[float] = []
@@ -104,6 +87,5 @@ async def test_classification_disabled_is_faster(db_url: str, _apply_schema, cle
     print(f"  With classification:    {mean_with:.3f} ms mean")
     print(f"  Without classification: {mean_without:.3f} ms mean")
 
-    # Both should be well under 8ms regardless
     assert statistics.median(latencies_with) < P95_THRESHOLD_MS
     assert statistics.median(latencies_without) < P95_THRESHOLD_MS

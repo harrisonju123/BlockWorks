@@ -20,7 +20,9 @@ export function CardShell({
   className = "",
 }: CardShellProps) {
   return (
-    <div className={`bg-gray-900 border border-gray-800 rounded-lg p-4 flex flex-col ${className}`}>
+    <div
+      className={`bg-gray-900 border border-gray-800 rounded-lg p-4 flex flex-col transition-[border-color,box-shadow] duration-200 hover:border-gray-700 hover:shadow-lg hover:shadow-black/20 ${className}`}
+    >
       {title && (
         <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
           {title}
@@ -28,12 +30,34 @@ export function CardShell({
       )}
 
       {loading && (
-        <div className={`${skeletonHeight} w-full animate-pulse rounded bg-gray-800`} />
+        <div className={`${skeletonHeight} w-full rounded bg-gray-800 relative overflow-hidden`}>
+          {/* Chart-shaped skeleton hint */}
+          <div className="absolute inset-0 flex items-end px-4 pb-3 gap-1 opacity-20">
+            <div className="w-full h-px bg-gray-600 absolute bottom-3 left-4 right-4" />
+            <div className="w-px h-full bg-gray-600 absolute left-4 top-2 bottom-3" />
+          </div>
+          <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-gray-700/30 to-transparent" />
+        </div>
       )}
 
       {!loading && error && (
-        <div className="flex items-center justify-center text-red-400 text-xs py-6">
-          Error: {error.message}
+        <div className="flex flex-col items-center justify-center gap-2 py-8">
+          <svg
+            className="w-6 h-6 text-red-400/60"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z"
+            />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <p className="text-red-400 text-xs">{error.message}</p>
+          <p className="text-gray-600 text-[10px]">Check that the API server is running on :8100</p>
         </div>
       )}
 

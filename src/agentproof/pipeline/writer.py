@@ -14,6 +14,7 @@ from typing import Any
 
 import asyncpg
 
+from agentproof.pipeline.base_worker import AsyncQueueWorker
 from agentproof.types import LLMEvent
 
 logger = logging.getLogger(__name__)
@@ -37,10 +38,8 @@ _TOOL_CALL_COLUMNS = [
     "id", "event_id", "created_at", "tool_name", "args_hash", "response_summary_hash",
 ]
 
-MAX_RETRIES = 3
 
-
-class EventWriter:
+class EventWriter(AsyncQueueWorker[LLMEvent]):
     """Consumes LLMEvents from a queue and batch-inserts into Postgres."""
 
     def __init__(
@@ -50,78 +49,17 @@ class EventWriter:
         batch_size: int = 50,
         flush_interval_s: float = 0.1,
     ) -> None:
-        # Convert SQLAlchemy URL to asyncpg format
-        self._db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
-        self._queue = queue
-        self._batch_size = batch_size
-        self._flush_interval_s = flush_interval_s
-        self._pool: asyncpg.Pool | None = None
+        super().__init__(
+            db_url=db_url,
+            queue=queue,
+            batch_size=batch_size,
+            flush_interval_s=flush_interval_s,
+            pool_min=2,
+            pool_max=10,
+        )
 
-    async def _ensure_pool(self) -> asyncpg.Pool:
-        if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self._db_url, min_size=2, max_size=10
-            )
-        return self._pool
-
-    async def run(self) -> None:
-        """Main loop: drain queue, batch, flush."""
-        pool = await self._ensure_pool()
-        batch: list[LLMEvent] = []
-
-        while True:
-            try:
-                # Wait for first event or timeout
-                try:
-                    event = await asyncio.wait_for(
-                        self._queue.get(), timeout=self._flush_interval_s
-                    )
-                    batch.append(event)
-                except asyncio.TimeoutError:
-                    pass
-
-                # Drain whatever else is ready
-                while len(batch) < self._batch_size:
-                    try:
-                        event = self._queue.get_nowait()
-                        batch.append(event)
-                    except asyncio.QueueEmpty:
-                        break
-
-                if batch:
-                    await self._flush_with_retry(pool, batch)
-                    batch = []
-
-            except Exception:
-                logger.exception("EventWriter unexpected error — events may be lost")
-                batch = []
-                await asyncio.sleep(1.0)
-
-    async def _flush_with_retry(
-        self, pool: asyncpg.Pool, batch: list[LLMEvent]
-    ) -> None:
-        """Attempt batch flush with retries. On persistent failure, try individual inserts."""
-        for attempt in range(MAX_RETRIES):
-            try:
-                await self._flush(pool, batch)
-                return
-            except (asyncpg.PostgresConnectionError, OSError) as e:
-                logger.warning(
-                    "Flush attempt %d/%d failed (transient): %s",
-                    attempt + 1, MAX_RETRIES, e,
-                )
-                await asyncio.sleep(0.5 * (attempt + 1))
-            except Exception:
-                logger.exception("Flush failed with non-transient error")
-                break
-
-        # Batch flush failed — try individual inserts to isolate bad events
-        logger.warning("Batch flush failed, falling back to individual inserts")
-        for event in batch:
-            try:
-                await self._flush(pool, [event])
-            except Exception:
-                logger.exception("Failed to write event %s — dropping", event.id)
+    def _make_item_id(self, item: LLMEvent) -> str:
+        return str(item.id)
 
     async def _flush(self, pool: asyncpg.Pool, batch: list[LLMEvent]) -> None:
         """Write a batch of events using COPY for throughput."""

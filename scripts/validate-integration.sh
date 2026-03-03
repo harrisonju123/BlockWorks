@@ -46,7 +46,7 @@ check "Proxy health (${LITELLM_URL})" curl -sf "${LITELLM_URL}/health"
 echo "[4/5] Send test completion through proxy"
 
 # Grab event count before the test request
-BEFORE=$(curl -sf "${API_URL}/api/v1/events" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('count', len(d)) if isinstance(d, dict) else len(d))" 2>/dev/null || echo "0")
+BEFORE=$(curl -sf "${API_URL}/api/v1/events" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('total_count', 0))" 2>/dev/null || echo "0")
 
 COMPLETION_STATUS=0
 RESPONSE=$(curl -sf -X POST "${LITELLM_URL}/v1/chat/completions" \
@@ -73,7 +73,7 @@ echo "[5/5] Verify event captured"
 # Give the async pipeline a moment to flush
 sleep 2
 
-AFTER=$(curl -sf "${API_URL}/api/v1/events" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('count', len(d)) if isinstance(d, dict) else len(d))" 2>/dev/null || echo "0")
+AFTER=$(curl -sf "${API_URL}/api/v1/events" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('total_count', 0))" 2>/dev/null || echo "0")
 
 if [ "$AFTER" -gt "$BEFORE" ]; then
     printf "  %-45s PASS\n" "New event recorded in API"

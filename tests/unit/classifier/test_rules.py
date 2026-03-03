@@ -1,6 +1,6 @@
 """Tests for the rules-based classifier."""
 
-from agentproof.classifier.rules import classify
+from agentproof.classifier.rules import classify, extract_keywords
 from agentproof.classifier.taxonomy import ClassifierInput
 from agentproof.types import TaskType
 
@@ -69,3 +69,30 @@ class TestRulesClassifier:
         inp = _make_input(has_tools=True, has_json_schema=True)
         result = classify(inp)
         assert len(result.signals) > 0
+
+
+class TestExtractKeywordsWordBoundary:
+    """Verify that single-word keywords use word-boundary matching
+    to avoid substring false positives (e.g. "class" in "classify")."""
+
+    def test_class_does_not_match_classify(self):
+        result = extract_keywords("Please classify this document")
+        assert "classify" in result
+        assert "class" not in result
+
+    def test_help_does_not_match_helpful(self):
+        result = extract_keywords("This is a helpful assistant")
+        assert "help" not in result
+
+    def test_multiword_keywords_still_match(self):
+        result = extract_keywords("please write code for me")
+        assert "write code" in result
+
+    def test_exact_single_word_still_matches(self):
+        """Exact word occurrence must still be detected."""
+        result = extract_keywords("define a class for the model")
+        assert "class" in result
+
+    def test_help_exact_word_matches(self):
+        result = extract_keywords("I need help with this task")
+        assert "help" in result

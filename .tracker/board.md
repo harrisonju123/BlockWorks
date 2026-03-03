@@ -2,71 +2,96 @@
 
 > Last updated: 2026-03-03
 
-## Phase 0 — Foundation
+## Phase 0 — Foundation (COMPLETE)
 
 | ID | Initiative | Owner | Status | Dependencies | Target |
 |----|-----------|-------|--------|--------------|--------|
-| 0A | Core Data Pipeline | infra + be1 | in progress | — | W1–W5 |
-| 0B | Task Classification Engine | ml | in progress | — | W1–W5 |
-| 0C | CLI + Dashboard MVP | fe | in progress | 0A (schema) | W2–W6 |
-| 0D | Initial Integrations | be2 | not started | 0A (callback) | W3–W7 |
+| 0A | Core Data Pipeline | infra + be1 | done | — | W1–W5 |
+| 0B | Task Classification Engine | ml | done | — | W1–W5 |
+| 0C | CLI + Dashboard MVP | fe | done | 0A (schema) | W2–W6 |
+| 0D | Initial Integrations | be2 | done | 0A (callback) | W3–W7 |
 
-## Phase 1 — Intelligence Layer
-
-| ID | Initiative | Owner | Status | Dependencies | Target |
-|----|-----------|-------|--------|--------------|--------|
-| 1A | Cross-Provider Benchmarking | ml + be2 | not started | 0A, 0B | W6–W12 |
-| 1B | Waste Detection & Recommendations | ml + fe | not started | 0B, 1A | W10–W14 |
-| 1C | Smart Routing Engine | be2 + infra | not started | 1A | W10–W14 |
-| 1D | MCP Server Tracing | be1 | not started | 0A | W6–W10 |
-| 1E | Alerts & Budgets | fe + infra | not started | 0A, 0C | W8–W12 |
-
-## Phase 2 — Attestation Layer
+## Phase 1 — Intelligence Layer (COMPLETE)
 
 | ID | Initiative | Owner | Status | Dependencies | Target |
 |----|-----------|-------|--------|--------------|--------|
-| 2A | On-Chain Attestation Protocol | web3 | not started | — | W1–W12 |
-| 2B | Vendor Accountability Reports | ml + web3 | not started | 1A, 2A | W14–W18 |
-| 2C | Billing Verification | be1 + web3 | not started | 0A, 2A | W14–W18 |
-| 2D | Compliance Audit Trail | be1 + infra | not started | 0A, 2A | W14–W20 |
-| 2E | State Channel Foundation | web3 | not started | 2A | W18–W22 |
+| 1A | Cross-Provider Benchmarking | ml + be2 | done | 0A, 0B | W6–W12 |
+| 1B | Waste Detection & Recommendations | ml + fe | done | 0B, 1A | W10–W14 |
+| 1C | Smart Routing Engine | be2 + infra | done | 1A | W10–W14 |
+| 1D | MCP Server Tracing | be1 | done | 0A | W6–W10 |
+| 1E | Alerts & Budgets | fe + infra | done | 0A, 0C | W8–W12 |
 
-## Phase 3 — Protocol & Network
+### Hardening (completed before Phase 1 features)
+- [x] EventWriter graceful shutdown (drain queue on SIGTERM)
+- [x] Queries wired to continuous aggregates (daily_summary, hourly_model_stats)
+- [x] pg_interval parameterized in SQL (CAST(:bucket_interval AS INTERVAL))
 
-| ID | Initiative | Owner | Status | Dependencies | Target |
-|----|-----------|-------|--------|--------------|--------|
-| 3A | Decentralized Validation | web3 + be2 | not started | 2A, 1A | W20–W26 |
-| 3B | Global Model Fitness Index | ml + fe | not started | 1A, 3A | W24–W30 |
-| 3C | Token Design & Launch | web3 | not started | 2A | W22–W30 |
-| 3D | Agent Trust Scores | ml + be2 | not started | 1A, 2A | W24–W30 |
-| 3E | SDK Ecosystem Expansion | be1 + fe | not started | 0A | W20–W28 |
-
-## Phase 4 — Marketplace (Placeholder)
+## Phase 2 — Attestation Layer (COMPLETE)
 
 | ID | Initiative | Owner | Status | Dependencies | Target |
 |----|-----------|-------|--------|--------------|--------|
-| 4A | Agent & MCP Registry | TBD | not started | 3D | W28+ |
-| 4B | Composable Workflow Builder | TBD | not started | 4A | W30+ |
-| 4C | Revenue Sharing Protocol | TBD | not started | 2E, 4A | W32+ |
-| 4D | Enterprise Multi-Tenant | TBD | not started | 2D | W30+ |
-| 4E | Cross-Platform Interop | TBD | not started | 4A, 4C | W36+ |
+| 2A | On-Chain Attestation Protocol | web3 | done | — | W1–W12 |
+| 2B | Vendor Accountability Reports | ml + web3 | done | 1A, 2A | W14–W18 |
+| 2C | Billing Verification | be1 + web3 | done | 0A, 2A | W14–W18 |
+| 2D | Compliance Audit Trail | be1 + infra | done | 0A, 2A | W14–W20 |
+| 2E | State Channel Foundation | web3 | done | 2A | W18–W22 |
 
-## Team Allocation
+## Phase 3 — Protocol & Network (COMPLETE)
 
-| Role | Person | Current Focus |
-|------|--------|---------------|
-| Infra Lead | TBD | — |
-| Backend 1 | TBD | — |
-| Backend 2 | TBD | — |
-| Frontend/CLI | TBD | — |
-| ML/Eval | TBD | — |
-| Web3/Protocol | TBD | — |
+| ID | Initiative | Owner | Status | Dependencies | Target |
+|----|-----------|-------|--------|--------------|--------|
+| 3A | Decentralized Validation | web3 + be2 | done | 2A, 1A | W20–W26 |
+| 3B | Global Model Fitness Index | ml + fe | done | 1A, 3A | W24–W30 |
+| 3C | Token Design & Launch | web3 | done | 2A | W22–W30 |
+| 3D | Agent Trust Scores | ml + be2 | done | 1A, 2A | W24–W30 |
+| 3E | SDK Ecosystem Expansion | be1 + fe | done | 0A | W20–W28 |
+
+## Phase 4 — Marketplace (COMPLETE)
+
+| ID | Initiative | Owner | Status | Dependencies | Target |
+|----|-----------|-------|--------|--------------|--------|
+| 4A | Agent & MCP Registry | be2 + fe | done | 3D | W28+ |
+| 4B | Composable Workflow Builder | be1 + fe | done | 4A | W30+ |
+| 4C | Revenue Sharing Protocol | web3 | done | 2E, 4A | W32+ |
+| 4D | Enterprise Multi-Tenant | infra + be1 | done | 2D | W30+ |
+| 4E | Cross-Platform Interop | be2 + web3 | done | 4A, 4C | W36+ |
+
+## Codebase Stats
+
+| Metric | Value |
+|--------|-------|
+| Unit tests | 1377 passing |
+| Source packages | 25 (pipeline, classifier, api, cli, benchmarking, mcp, alerts, waste, routing, attestation, billing, compliance, channels, validators, governance, trust, sdk, fitness, registry, enterprise, workflows, revenue, interop) |
+| Solidity contracts | 6 (Attestation, Channel, Staking, Token, Trust, Revenue) |
+| API endpoints | 60+ |
+| SQL schemas | 4 (schema.sql, schema_benchmarks.sql, schema_mcp.sql, schema_alerts.sql) |
+| API endpoints | 20+ |
+| Integration guides | 4 (Claude Code, OpenCode, LangChain, CrewAI) |
+| ADRs | 4 (Phase 0 arch, Phase 1 arch, Attestation protocol) |
+
+## Architecture Decisions
+
+- [ADR-001](decisions/ADR-001-phase0-architecture.md) — Phase 0 architecture, tech stack, interface contracts
+- [ADR-003](decisions/ADR-003-phase1-architecture.md) — Phase 1 architecture, new schemas, parallel execution plan
 
 ## Critical Path
 
 ```
-0A → 0B → 1A → 1B/1C (core value prop)
-0A → 0C → 1E (user-facing observability)
-0A → 1D (MCP tracing — unique differentiator)
-2A → 2B/2C/2D → 2E (attestation stack)
+DONE:  0A → 0B → 1A → 1B + 1C (full intelligence layer)
+DONE:  0A → 0C → 1E (alerts & budgets)
+DONE:  0A → 1D (MCP tracing)
+NOW:   2A design complete → 2A-4/5/6 implementation
+NEXT:  2A → 2B/2C/2D (parallel) → 2E (state channels)
 ```
+
+## Technical Debt / Simplify Backlog
+
+Items noted during code reviews, not blocking but should be addressed:
+
+- [ ] Extract `AsyncQueueWorker` base class (EventWriter, MCPWriter, BenchmarkWorker share ~80 lines)
+- [ ] Consolidate `MCPCallStatus` into `EventStatus` (identical enums)
+- [ ] Consolidate `MODEL_DOWNGRADE_MAP` with waste.py `MODEL_COST_TIERS`
+- [ ] Type `BenchmarkResult.task_type` as `TaskType` enum (currently `str`)
+- [ ] MCP response schema types duplicate `mcp/types.py` models
+- [ ] Add `utcnow()` helper for consistent timestamp generation
+- [ ] Keyword substring matching produces false positives ("class" matches "classify")

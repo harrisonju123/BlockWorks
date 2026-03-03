@@ -2,9 +2,6 @@
 
 Verifies the full pipeline works end-to-end:
   callback -> queue -> writer -> TimescaleDB -> query verification
-
-Uses testcontainers to spin up a real TimescaleDB instance so we
-test actual SQL, COPY protocol, hypertable behavior, etc.
 """
 
 from __future__ import annotations
@@ -16,7 +13,7 @@ import pytest
 
 from agentproof.pipeline.callback import AgentProofCallback
 
-from .conftest import make_litellm_kwargs
+from .conftest import make_callback, make_litellm_kwargs, wait_for_flush
 
 
 pytestmark = pytest.mark.integration
@@ -24,38 +21,17 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def callback(db_url: str, _apply_schema) -> AgentProofCallback:
-    """Create a callback instance pointed at the test DB."""
-    return AgentProofCallback(
-        db_url=db_url,
-        org_id="test-org",
-        enable_classification=True,
-        batch_size=10,
-        flush_interval_ms=50,
-    )
-
-
-async def _wait_for_flush(pool: asyncpg.Pool, expected: int, timeout_s: float = 5.0) -> int:
-    """Poll the DB until we see the expected event count or timeout."""
-    deadline = asyncio.get_event_loop().time() + timeout_s
-    count = 0
-    while asyncio.get_event_loop().time() < deadline:
-        async with pool.acquire() as conn:
-            count = await conn.fetchval("SELECT COUNT(*) FROM llm_events")
-        if count >= expected:
-            return count
-        await asyncio.sleep(0.05)
-    return count
+    return make_callback(db_url)
 
 
 class TestSuccessEvent:
-    """Verify a single successful LLM call flows through the pipeline."""
 
     async def test_event_persisted(self, callback: AgentProofCallback, clean_db: asyncpg.Pool):
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs()
 
         await callback.async_log_success_event(kwargs, response_obj, start_time, end_time)
 
-        count = await _wait_for_flush(clean_db, expected=1)
+        count = await wait_for_flush(clean_db, expected=1)
         assert count == 1
 
     async def test_field_values(self, callback: AgentProofCallback, clean_db: asyncpg.Pool):
@@ -68,7 +44,7 @@ class TestSuccessEvent:
         )
 
         await callback.async_log_success_event(kwargs, response_obj, start_time, end_time)
-        await _wait_for_flush(clean_db, expected=1)
+        await wait_for_flush(clean_db, expected=1)
 
         async with clean_db.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM llm_events LIMIT 1")
@@ -86,12 +62,11 @@ class TestSuccessEvent:
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs()
 
         await callback.async_log_success_event(kwargs, response_obj, start_time, end_time)
-        await _wait_for_flush(clean_db, expected=1)
+        await wait_for_flush(clean_db, expected=1)
 
         async with clean_db.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM llm_events LIMIT 1")
 
-        # Hashes should be 64-char hex (SHA-256)
         assert row["prompt_hash"] is not None
         assert len(row["prompt_hash"]) == 64
         assert row["completion_hash"] is not None
@@ -102,7 +77,6 @@ class TestSuccessEvent:
     async def test_classification_populated(
         self, callback: AgentProofCallback, clean_db: asyncpg.Pool
     ):
-        """The classifier should set task_type based on system prompt signals."""
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs(
             messages=[
                 {"role": "system", "content": "You are a code assistant. Write code and implement functions."},
@@ -111,7 +85,7 @@ class TestSuccessEvent:
         )
 
         await callback.async_log_success_event(kwargs, response_obj, start_time, end_time)
-        await _wait_for_flush(clean_db, expected=1)
+        await wait_for_flush(clean_db, expected=1)
 
         async with clean_db.acquire() as conn:
             row = await conn.fetchrow("SELECT task_type, task_type_confidence FROM llm_events LIMIT 1")
@@ -122,7 +96,6 @@ class TestSuccessEvent:
 
 
 class TestFailureEvent:
-    """Verify failure events are persisted with error context."""
 
     async def test_failure_persisted(self, callback: AgentProofCallback, clean_db: asyncpg.Pool):
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs(
@@ -130,7 +103,7 @@ class TestFailureEvent:
         )
 
         await callback.async_log_failure_event(kwargs, response_obj, start_time, end_time)
-        await _wait_for_flush(clean_db, expected=1)
+        await wait_for_flush(clean_db, expected=1)
 
         async with clean_db.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM llm_events LIMIT 1")
@@ -142,7 +115,6 @@ class TestFailureEvent:
 
 
 class TestToolCalls:
-    """Verify tool calls are written to the normalized tool_calls table."""
 
     async def test_tool_calls_persisted(
         self, callback: AgentProofCallback, clean_db: asyncpg.Pool
@@ -156,7 +128,7 @@ class TestToolCalls:
         )
 
         await callback.async_log_success_event(kwargs, response_obj, start_time, end_time)
-        await _wait_for_flush(clean_db, expected=1)
+        await wait_for_flush(clean_db, expected=1)
 
         async with clean_db.acquire() as conn:
             event_row = await conn.fetchrow("SELECT * FROM llm_events LIMIT 1")
@@ -169,12 +141,10 @@ class TestToolCalls:
         assert len(tool_rows) == 2
         assert tool_rows[0]["tool_name"] == "get_weather"
         assert tool_rows[1]["tool_name"] == "search_db"
-        # args_hash should be a SHA-256 hex digest
         assert len(tool_rows[0]["args_hash"]) == 64
 
 
 class TestBatchFlush:
-    """Verify that multiple events are batched and flushed correctly."""
 
     async def test_multiple_events(self, callback: AgentProofCallback, clean_db: asyncpg.Pool):
         for i in range(15):
@@ -184,7 +154,7 @@ class TestBatchFlush:
             )
             await callback.async_log_success_event(kwargs, response_obj, start_time, end_time)
 
-        count = await _wait_for_flush(clean_db, expected=15, timeout_s=10.0)
+        count = await wait_for_flush(clean_db, expected=15, timeout_s=10.0)
         assert count == 15
 
         async with clean_db.acquire() as conn:
@@ -195,51 +165,36 @@ class TestBatchFlush:
 
 
 class TestQueueFull:
-    """Verify the callback doesn't crash when the queue is full."""
 
     async def test_queue_full_no_crash(self, db_url: str, _apply_schema):
-        """Fill the queue beyond capacity and verify graceful degradation."""
-        cb = AgentProofCallback(
-            db_url=db_url,
-            org_id="test-org",
-            enable_classification=False,
-            batch_size=10,
-            flush_interval_ms=50,
-        )
-        # Override queue to a tiny capacity
+        cb = make_callback(db_url, enable_classification=False)
         cb._queue = asyncio.Queue(maxsize=5)
 
-        # Enqueue without starting the writer — queue will fill
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs()
 
-        # First call starts the writer, but we keep pushing fast enough to fill
         for _ in range(20):
             await cb.async_log_success_event(kwargs, response_obj, start_time, end_time)
 
-        # No exception should have been raised. The queue drops events
-        # when full instead of blocking or crashing.
+        # No exception should have been raised
         assert True
 
 
 class TestMixedEvents:
-    """Verify success and failure events coexist correctly."""
 
     async def test_mixed_success_and_failure(
         self, callback: AgentProofCallback, clean_db: asyncpg.Pool
     ):
-        # 3 success events
         for _ in range(3):
             kwargs, resp, st, et = make_litellm_kwargs()
             await callback.async_log_success_event(kwargs, resp, st, et)
 
-        # 2 failure events
         for _ in range(2):
             kwargs, resp, st, et = make_litellm_kwargs(
                 exception=TimeoutError("Gateway timeout"),
             )
             await callback.async_log_failure_event(kwargs, resp, st, et)
 
-        count = await _wait_for_flush(clean_db, expected=5)
+        count = await wait_for_flush(clean_db, expected=5)
         assert count == 5
 
         async with clean_db.acquire() as conn:

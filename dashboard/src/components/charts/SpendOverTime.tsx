@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -10,27 +11,10 @@ import {
 import { CardShell } from "../common/CardShell";
 import { useTimeseries } from "../../hooks/useStats";
 import type { TimeRange } from "../../hooks/useStats";
+import { formatTimestamp, formatUSD } from "../../utils/format";
 
 interface Props {
   timeRange: TimeRange;
-}
-
-function formatTimestamp(iso: string, timeRange: TimeRange): string {
-  const d = new Date(iso);
-  if (timeRange === "30d") {
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  }
-  if (timeRange === "7d") {
-    return d.toLocaleDateString("en-US", { weekday: "short", hour: "numeric" });
-  }
-  // 24h: show just the hour
-  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-}
-
-function formatUSD(value: number): string {
-  if (value >= 1) return `$${value.toFixed(2)}`;
-  // Sub-dollar amounts shown with more precision
-  return `$${value.toFixed(4)}`;
 }
 
 interface TooltipPayload {
@@ -48,7 +32,7 @@ function CustomTooltip({
   if (!active || !payload?.length) return null;
   const point = payload[0];
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-xs">
+    <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded px-3 py-2 text-xs border-l-2 border-l-violet-500">
       <p className="text-gray-400 mb-1">
         {new Date(point.payload.timestamp).toLocaleString()}
       </p>
@@ -60,12 +44,15 @@ function CustomTooltip({
 export function SpendOverTime({ timeRange }: Props) {
   const { data, isLoading, error } = useTimeseries("cost", timeRange);
 
-  const chartData = data?.data.map((pt) => ({
-    timestamp: pt.timestamp,
-    // Label shown on axis — derived from full timestamp
-    label: formatTimestamp(pt.timestamp, timeRange),
-    value: pt.value,
-  })) ?? [];
+  const chartData = useMemo(
+    () =>
+      data?.data.map((pt) => ({
+        timestamp: pt.timestamp,
+        label: formatTimestamp(pt.timestamp, timeRange),
+        value: pt.value,
+      })) ?? [],
+    [data, timeRange]
+  );
 
   return (
     <CardShell
@@ -76,8 +63,14 @@ export function SpendOverTime({ timeRange }: Props) {
       className="min-h-[16rem]"
     >
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+        <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="spendGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.3} />
+              <stop offset="100%" stopColor="#7c3aed" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#111827" strokeOpacity={0.6} />
           <XAxis
             dataKey="label"
             tick={{ fontSize: 10, fill: "#6b7280" }}
@@ -93,15 +86,16 @@ export function SpendOverTime({ timeRange }: Props) {
             width={56}
           />
           <Tooltip content={<CustomTooltip />} />
-          <Line
+          <Area
             type="monotone"
             dataKey="value"
             stroke="#7c3aed"
             strokeWidth={2}
+            fill="url(#spendGradient)"
             dot={false}
             activeDot={{ r: 4, fill: "#7c3aed", stroke: "#1f2937", strokeWidth: 2 }}
           />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     </CardShell>
   );

@@ -1,6 +1,6 @@
 # 1E — Alerts & Budgets
 
-**Status:** not started
+**Status:** done
 **Owner:** fe + infra
 **Target:** Weeks 8–12
 **Dependencies:** 0A (data pipeline), 0C (dashboard)
@@ -8,22 +8,27 @@
 
 ## Objective
 
-Spend alerts, budget caps with automatic model downgrade, and anomaly detection. Prevent runaway costs from agent loops and misconfigurations.
+Spend alerts, budget caps with automatic model downgrade, and anomaly detection.
 
 ## Tasks
 
-- [ ] **1E-1** Per-project and per-user spend tracking aggregation layer — `infra`
-- [ ] **1E-2** Slack + email alert integrations (webhook-based) — `fe`
-- [ ] **1E-3** Budget caps with automatic model downgrade (integrates with 1C smart routing) — `infra`
-- [ ] **1E-4** Anomaly detection — statistical baseline of spend patterns, flag deviations (Z-score or similar) — `infra`
-- [ ] **1E-5** Extend LiteLLM budget tracking with intelligent thresholds (dynamic, based on rolling averages vs fixed numbers) — `infra`
+- [x] **1E-1** Per-project and per-user spend tracking aggregation layer — `infra` (done 2026-03-03)
+- [x] **1E-2** Slack + email alert integrations (webhook-based) — `fe` (done 2026-03-03)
+- [x] **1E-3** Budget caps with automatic model downgrade — `infra` (done 2026-03-03)
+- [x] **1E-4** Anomaly detection — Z-score on rolling 7-day baseline from daily_summary — `infra` (done 2026-03-03)
+- [x] **1E-5** Intelligent thresholds — dynamic baselines via continuous aggregates — `infra` (done 2026-03-03)
 
 ## Technical Notes
 
-- Anomaly detection should catch: infinite agent loops, sudden spike in token usage, unexpected model switches
-- Budget caps: soft cap (alert) vs hard cap (downgrade model) vs kill switch (reject requests)
-- Intelligent thresholds: "alert when daily spend exceeds 2x the 7-day rolling average" instead of fixed $100/day
-- Slack integration: use incoming webhooks, keep it simple
+- `schema_alerts.sql`: alert_rules, budget_configs, alert_history (hypertable)
+- `alerts/anomaly.py`: Z-score spend anomaly (2.0=warning, 3.0=critical), model switch detection, failure rate spikes
+- `alerts/budgets.py`: 80%/95%/100% thresholds with configurable action (alert/downgrade/block)
+- `alerts/notify.py`: Slack Block Kit + SMTP email (via run_in_executor, non-blocking)
+- `alerts/checker.py`: Background loop with cooldown deduplication, dispatch_alert wired in
+- 8 API endpoints: CRUD rules, alert history, budget management
+- 79 unit tests covering anomaly detection, budgets, notifications, checker lifecycle
+- SMTP blocking issue fixed in simplify (run_in_executor)
+- AlertChecker dispatch wiring and _last_fired pruning added in simplify
 
 ## Blockers
 

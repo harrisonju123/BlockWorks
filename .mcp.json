@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "redash": {
+      "command": "node",
+      "args": ["/Users/hju/.asdf/installs/nodejs/20.12.2/lib/node_modules/@justworkshr/mcp-redash/dist/cli.js"],
+      "env": {
+        "REDASH_URL": "https://redash.data.justworks.com",
+        "REDASH_API_KEY": "NUSsM5eDTEWi5bCcwhIKVN1dlhNMewTs7FxQw4A1",
+        "REDASH_READ_ONLY_MODE": "true"
+      }
+    }
+  }
+}

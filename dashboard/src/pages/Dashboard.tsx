@@ -17,15 +17,14 @@ export function Dashboard({ timeRange }: Props) {
       <StatsBar timeRange={timeRange} />
 
       {/* Row 2: time-series charts side by side */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SpendOverTime timeRange={timeRange} />
         <RequestsOverTime timeRange={timeRange} />
       </div>
 
       {/* Row 3: cost breakdown + waste score */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* Cost distribution gets more real estate since it grows vertically */}
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2">
           <CostDistribution timeRange={timeRange} />
         </div>
         <WasteScore timeRange={timeRange} />

@@ -1,0 +1,32 @@
+{
+  "name": "@agentproof/sdk",
+  "version": "0.1.0",
+  "description": "AgentProof TypeScript SDK — LLM observability, waste detection, and benchmarking",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "echo 'No tests yet — scaffold only'",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "llm",
+    "observability",
+    "ai",
+    "cost",
+    "benchmarking",
+    "agentproof"
+  ],
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.7"
+  }
+}

@@ -83,3 +83,57 @@ export interface LLMEvent {
   has_tool_calls: boolean;
   agent_framework: string | null;
 }
+
+// -- Benchmarking types -------------------------------------------------------
+
+export interface FitnessEntry {
+  task_type: string;
+  model: string;
+  avg_quality: number;
+  avg_cost: number;
+  avg_latency: number;
+  sample_size: number;
+}
+
+export interface FitnessMatrixResponse {
+  entries: FitnessEntry[];
+}
+
+export interface BenchmarkResult {
+  id: string;
+  created_at: string;
+  original_event_id: string;
+  original_model: string;
+  benchmark_model: string;
+  task_type: string;
+  quality_score: number;
+  original_cost: number;
+  benchmark_cost: number;
+  original_latency_ms: number;
+  benchmark_latency_ms: number;
+  judge_model: string;
+  rubric_version: string;
+  org_id: string | null;
+}
+
+export interface BenchmarkResultsResponse {
+  results: BenchmarkResult[];
+  total_count: number;
+  has_more: boolean;
+}
+
+export interface BenchmarkConfig {
+  enabled: boolean;
+  sample_rate: number;
+  benchmark_models: string[];
+  judge_model: string;
+  enabled_task_types: string[];
+}
+
+export interface BenchmarkConfigUpdate {
+  enabled?: boolean;
+  sample_rate?: number;
+  benchmark_models?: string[];
+  judge_model?: string;
+  enabled_task_types?: string[];
+}

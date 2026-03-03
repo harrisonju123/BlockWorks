@@ -20,6 +20,10 @@
   Dark-first base: we don't use a light mode. The body background and
   text defaults match the gray-950/gray-100 design spec.
 */
+html {
+  scroll-behavior: smooth;
+}
+
 html,
 body {
   background-color: #030712;
@@ -38,4 +42,23 @@ body {
 
 .recharts-tooltip-wrapper {
   outline: none;
+}
+
+/* Dark scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
 }

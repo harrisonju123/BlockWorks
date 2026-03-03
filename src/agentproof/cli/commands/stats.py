@@ -1,6 +1,6 @@
 """agentproof stats — spend summary, top traces, waste score."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import httpx
 import typer
@@ -8,13 +8,15 @@ from rich.console import Console
 from rich.table import Table
 
 from agentproof.config import get_config
+from agentproof.utils import utcnow
 
 console = Console()
 
 
 def _api_base() -> str:
     config = get_config()
-    return f"http://{config.api_host}:{config.api_port}/api/v1"
+    host = "localhost" if config.api_host == "0.0.0.0" else config.api_host
+    return f"http://{host}:{config.api_port}/api/v1"
 
 
 def stats(
@@ -24,7 +26,7 @@ def stats(
 ) -> None:
     """Show spend summary, top traces, and waste score."""
     base = api_url or _api_base()
-    now = datetime.now(timezone.utc)
+    now = utcnow()
     delta_map = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30)}
     delta = delta_map.get(period, timedelta(hours=24))
     start = now - delta

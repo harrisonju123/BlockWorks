@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from agentproof.types import TaskType
+from agentproof.types import EventStatus, TaskType
 
 
 class Period(BaseModel):
@@ -80,7 +80,7 @@ class WasteScoreResponse(BaseModel):
 class EventDetail(BaseModel):
     id: str
     created_at: datetime
-    status: str
+    status: EventStatus
     provider: str
     model: str
     prompt_tokens: int
@@ -90,7 +90,7 @@ class EventDetail(BaseModel):
     latency_ms: float
     trace_id: str
     span_id: str
-    task_type: str | None
+    task_type: TaskType | None
     task_type_confidence: float | None
     has_tool_calls: bool
     agent_framework: str | None
@@ -106,3 +106,27 @@ class HealthResponse(BaseModel):
     status: str
     db: str
     version: str
+
+
+class WasteDetailItem(BaseModel):
+    """Individual waste finding in the detailed report."""
+
+    category: str
+    severity: str
+    affected_trace_ids: list[str]
+    call_count: int
+    current_cost: float
+    projected_cost: float
+    savings: float
+    description: str
+    confidence: float
+
+
+class WasteReportResponse(BaseModel):
+    """Full waste report with per-item breakdown."""
+
+    items: list[WasteDetailItem]
+    total_savings: float
+    total_spend: float
+    waste_score: float
+    generated_at: str | None = None

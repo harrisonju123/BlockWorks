@@ -5,7 +5,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- Core events table
 CREATE TABLE llm_events (
-    id                      UUID PRIMARY KEY,
+    id                      UUID NOT NULL,
     created_at              TIMESTAMPTZ NOT NULL,
     status                  TEXT NOT NULL CHECK (status IN ('success', 'failure')),
 
@@ -58,7 +58,9 @@ CREATE TABLE llm_events (
     api_base                TEXT,
     org_id                  TEXT,
     user_id                 TEXT,
-    custom_metadata         JSONB
+    custom_metadata         JSONB,
+
+    PRIMARY KEY (id, created_at)
 );
 
 -- Convert to hypertable (1-day chunks)
@@ -80,13 +82,17 @@ CREATE INDEX idx_llm_events_status ON llm_events (status, created_at DESC)
 CREATE INDEX idx_llm_events_cost ON llm_events (estimated_cost DESC, created_at DESC);
 
 -- Tool calls (normalized)
+-- No FK to llm_events: TimescaleDB doesn't support cross-hypertable foreign keys.
+-- Orphan cleanup relies on application-level consistency (transactional COPY writes).
 CREATE TABLE tool_calls (
-    id                      UUID PRIMARY KEY,
+    id                      UUID NOT NULL,
     event_id                UUID NOT NULL,
     created_at              TIMESTAMPTZ NOT NULL,
     tool_name               TEXT NOT NULL,
     args_hash               TEXT NOT NULL,
-    response_summary_hash   TEXT
+    response_summary_hash   TEXT,
+
+    PRIMARY KEY (id, created_at)
 );
 
 SELECT create_hypertable('tool_calls', 'created_at',

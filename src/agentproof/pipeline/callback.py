@@ -4,6 +4,9 @@ Captures every LLM request/response, hashes content, classifies
 the task type, and writes events to TimescaleDB via an async
 background buffer. The callback itself never blocks the LLM
 request path.
+
+When MCP tracing is enabled, tool_use blocks are additionally
+parsed for MCP server calls and queued to a dedicated MCPWriter.
 """
 
 from __future__ import annotations
@@ -16,8 +19,15 @@ from typing import Any
 
 from litellm.integrations.custom_logger import CustomLogger
 
-from agentproof.classifier.rules import classify
+from agentproof.classifier.rules import classify, compute_token_ratio, extract_keywords
 from agentproof.classifier.taxonomy import ClassifierInput
+from agentproof.mcp.extractor import (
+    build_execution_graph,
+    extract_mcp_calls,
+    extract_mcp_calls_from_tool_calls,
+)
+from agentproof.mcp.types import MCPCall, MCPExecutionEdge
+from agentproof.mcp.writer import MCPWriter
 from agentproof.pipeline.context import detect_agent_framework, extract_trace_context
 from agentproof.pipeline.hasher import hash_content
 from agentproof.pipeline.writer import EventWriter
@@ -38,12 +48,14 @@ class AgentProofCallback(CustomLogger):
         db_url: str,
         org_id: str | None = None,
         enable_classification: bool = True,
+        mcp_tracing_enabled: bool = True,
         batch_size: int = 50,
         flush_interval_ms: int = 100,
     ) -> None:
         self._db_url = db_url
         self._org_id = org_id
         self._enable_classification = enable_classification
+        self._mcp_tracing_enabled = mcp_tracing_enabled
         self._batch_size = batch_size
         self._flush_interval_s = flush_interval_ms / 1000.0
         self._queue: asyncio.Queue[LLMEvent] = asyncio.Queue(maxsize=10_000)
@@ -51,8 +63,14 @@ class AgentProofCallback(CustomLogger):
         self._writer_task: asyncio.Task | None = None
         self._init_lock: asyncio.Lock = asyncio.Lock()
 
+        # MCP tracing queues and writer (lazily started alongside EventWriter)
+        self._mcp_call_queue: asyncio.Queue[MCPCall] = asyncio.Queue(maxsize=10_000)
+        self._mcp_edge_queue: asyncio.Queue[MCPExecutionEdge] = asyncio.Queue(maxsize=10_000)
+        self._mcp_writer: MCPWriter | None = None
+        self._mcp_writer_task: asyncio.Task | None = None
+
     async def _ensure_writer(self) -> None:
-        """Lazily start the background writer on first event."""
+        """Lazily start the background writer(s) on first event."""
         async with self._init_lock:
             if self._writer_task is None:
                 self._writer = EventWriter(
@@ -62,6 +80,49 @@ class AgentProofCallback(CustomLogger):
                     flush_interval_s=self._flush_interval_s,
                 )
                 self._writer_task = asyncio.create_task(self._writer.run())
+
+            if self._mcp_tracing_enabled and self._mcp_writer_task is None:
+                self._mcp_writer = MCPWriter(
+                    db_url=self._db_url,
+                    call_queue=self._mcp_call_queue,
+                    edge_queue=self._mcp_edge_queue,
+                    batch_size=self._batch_size,
+                    flush_interval_s=self._flush_interval_s,
+                )
+                self._mcp_writer_task = asyncio.create_task(self._mcp_writer.run())
+
+    async def close(self, timeout: float = 10.0) -> None:
+        """Shut down the writer(s), draining queued events before exit."""
+        if self._writer is not None:
+            await self._writer.shutdown()
+        if self._mcp_writer is not None:
+            await self._mcp_writer.shutdown()
+
+        if self._writer_task is not None:
+            try:
+                await asyncio.wait_for(self._writer_task, timeout=timeout)
+            except asyncio.TimeoutError:
+                logger.warning("Writer task did not finish in %.1fs, cancelling", timeout)
+                self._writer_task.cancel()
+                try:
+                    await self._writer_task
+                except asyncio.CancelledError:
+                    pass
+            self._writer_task = None
+            self._writer = None
+
+        if self._mcp_writer_task is not None:
+            try:
+                await asyncio.wait_for(self._mcp_writer_task, timeout=timeout)
+            except asyncio.TimeoutError:
+                logger.warning("MCP writer task did not finish in %.1fs, cancelling", timeout)
+                self._mcp_writer_task.cancel()
+                try:
+                    await self._mcp_writer_task
+                except asyncio.CancelledError:
+                    pass
+            self._mcp_writer_task = None
+            self._mcp_writer = None
 
     async def _log_event(
         self,
@@ -74,6 +135,10 @@ class AgentProofCallback(CustomLogger):
         await self._ensure_writer()
         event = self._build_event(kwargs, response_obj, start_time, end_time, status)
         self._enqueue(event)
+
+        # MCP extraction: parse tool_use blocks for MCP server calls
+        if self._mcp_tracing_enabled and event.has_tool_calls:
+            self._extract_and_enqueue_mcp(response_obj, event)
 
     async def async_log_success_event(
         self,
@@ -99,6 +164,65 @@ class AgentProofCallback(CustomLogger):
             self._queue.put_nowait(event)
         except asyncio.QueueFull:
             logger.warning("AgentProof event queue full — dropping event")
+
+    def _extract_and_enqueue_mcp(self, response_obj: Any, event: LLMEvent) -> None:
+        """Parse MCP calls from the response and enqueue them for the MCP writer."""
+        mcp_calls: list[MCPCall] = []
+
+        choices = getattr(response_obj, "choices", [])
+        message = getattr(choices[0], "message", None) if choices else None
+        if not message:
+            return
+
+        # Anthropic-style: tool_use in content blocks
+        content_blocks = getattr(message, "content", None)
+        if isinstance(content_blocks, list):
+            mcp_calls.extend(
+                extract_mcp_calls(
+                    content_blocks,
+                    event_id=event.id,
+                    trace_id=event.trace_id,
+                    created_at=event.created_at,
+                )
+            )
+
+        # OpenAI-style: tool_calls on the message object
+        raw_tool_calls = getattr(message, "tool_calls", None) or []
+        if raw_tool_calls:
+            mcp_calls.extend(
+                extract_mcp_calls_from_tool_calls(
+                    raw_tool_calls,
+                    event_id=event.id,
+                    trace_id=event.trace_id,
+                    created_at=event.created_at,
+                )
+            )
+
+        if not mcp_calls:
+            return
+
+        # Enqueue calls
+        for call in mcp_calls:
+            self._enqueue_mcp_call(call)
+
+        # Build and enqueue DAG edges
+        edges = build_execution_graph(mcp_calls)
+        for edge in edges:
+            self._enqueue_mcp_edge(edge)
+
+    def _enqueue_mcp_call(self, call: MCPCall) -> None:
+        """Non-blocking enqueue for MCP calls. Drops if buffer is full."""
+        try:
+            self._mcp_call_queue.put_nowait(call)
+        except asyncio.QueueFull:
+            logger.warning("MCP call queue full — dropping call %s", call.id)
+
+    def _enqueue_mcp_edge(self, edge: MCPExecutionEdge) -> None:
+        """Non-blocking enqueue for MCP edges. Drops if buffer is full."""
+        try:
+            self._mcp_edge_queue.put_nowait(edge)
+        except asyncio.QueueFull:
+            logger.warning("MCP edge queue full — dropping edge")
 
     def _build_event(
         self,
@@ -159,18 +283,10 @@ class AgentProofCallback(CustomLogger):
             if isinstance(msg, dict) and msg.get("role") == "system":
                 content = msg.get("content", "")
                 system_prompt_hash = hash_content(content)
-                content_lower = content.lower()
-                # Extract classification signals from system prompt
-                for kw in [
-                    "classify", "categorize", "label", "sentiment", "detect",
-                    "identify", "summarize", "summary", "tldr", "condense",
-                    "extract", "parse", "implement", "function", "class",
-                    "refactor", "write code", "explain", "reason", "analyze",
-                ]:
-                    if kw in content_lower:
-                        system_prompt_keywords.append(kw)
+                system_prompt_keywords = extract_keywords(content)
                 has_code_fence = "```" in content
                 has_json_schema = '"type"' in content and '"properties"' in content
+                content_lower = content.lower()
                 if "json" in content_lower:
                     output_format_hint = "json"
                 elif "```" in content:
@@ -187,9 +303,7 @@ class AgentProofCallback(CustomLogger):
         task_type = None
         task_type_confidence = None
         if self._enable_classification:
-            token_ratio = (
-                completion_tokens / prompt_tokens if prompt_tokens > 0 else 0.0
-            )
+            token_ratio = compute_token_ratio(prompt_tokens, completion_tokens)
             has_tools = bool(kwargs.get("tools") or kwargs.get("functions"))
             tool_count = len(kwargs.get("tools", []) or kwargs.get("functions", []))
 

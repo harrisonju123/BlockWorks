@@ -1,0 +1,75 @@
+{
+  "name": "agentproof-vscode",
+  "displayName": "AgentProof",
+  "description": "Real-time LLM cost monitoring and waste detection for AI-powered development",
+  "version": "0.1.0",
+  "publisher": "agentproof",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "llm",
+    "ai",
+    "cost",
+    "observability",
+    "agentproof"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentproof.showSessionStats",
+        "title": "AgentProof: Show Session Stats"
+      },
+      {
+        "command": "agentproof.showWasteScore",
+        "title": "AgentProof: Show Waste Score"
+      },
+      {
+        "command": "agentproof.configure",
+        "title": "AgentProof: Configure API URL"
+      }
+    ],
+    "configuration": {
+      "title": "AgentProof",
+      "properties": {
+        "agentproof.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8100",
+          "description": "URL of the AgentProof API server"
+        },
+        "agentproof.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for authenticated access (optional for local)"
+        },
+        "agentproof.statusBar.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show real-time cost in the status bar"
+        },
+        "agentproof.statusBar.refreshIntervalMs": {
+          "type": "number",
+          "default": 30000,
+          "description": "How often to refresh the status bar (milliseconds)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc",
+    "watch": "tsc --watch",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.7"
+  }
+}

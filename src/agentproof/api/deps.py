@@ -1,11 +1,12 @@
 """Dependency injection for FastAPI routes."""
 
 from collections.abc import AsyncGenerator
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentproof.db.engine import get_session_factory
+from agentproof.utils import utcnow
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -20,5 +21,5 @@ def resolve_time_range(
     default_hours: int = 24,
 ) -> tuple[datetime, datetime]:
     """Resolve optional start/end into concrete UTC datetimes."""
-    now = datetime.now(timezone.utc)
+    now = utcnow()
     return start or (now - timedelta(hours=default_hours)), end or now

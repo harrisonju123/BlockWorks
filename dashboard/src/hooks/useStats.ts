@@ -30,10 +30,37 @@ export function rangeToParams(range: TimeRange): { start: string; end: string } 
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+// Shift a range backward by its own duration to get the prior period.
+function previousRangeToParams(range: TimeRange): { start: string; end: string } {
+  const now = new Date();
+  const currentStart = new Date(now);
+  if (range === "24h") currentStart.setHours(currentStart.getHours() - 24);
+  else if (range === "7d") currentStart.setDate(currentStart.getDate() - 7);
+  else currentStart.setDate(currentStart.getDate() - 30);
+
+  // Previous period ends where current starts
+  const prevEnd = new Date(currentStart);
+  const prevStart = new Date(prevEnd);
+  if (range === "24h") prevStart.setHours(prevStart.getHours() - 24);
+  else if (range === "7d") prevStart.setDate(prevStart.getDate() - 7);
+  else prevStart.setDate(prevStart.getDate() - 30);
+
+  return { start: prevStart.toISOString(), end: prevEnd.toISOString() };
+}
+
 export function useSummary(range: TimeRange, groupBy = "model") {
   const { start, end } = rangeToParams(range);
   return useQuery({
     queryKey: ["summary", range, groupBy],
+    queryFn: () => getSummary(start, end, groupBy),
+    staleTime: 30_000,
+  });
+}
+
+export function usePreviousSummary(range: TimeRange, groupBy = "model") {
+  const { start, end } = previousRangeToParams(range);
+  return useQuery({
+    queryKey: ["summary-prev", range, groupBy],
     queryFn: () => getSummary(start, end, groupBy),
     staleTime: 30_000,
   });

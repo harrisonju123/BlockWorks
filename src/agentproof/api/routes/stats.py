@@ -1,4 +1,4 @@
-"""Stats endpoints: summary, timeseries, top traces, waste score."""
+"""Stats endpoints: summary, timeseries, top traces, waste score, waste details."""
 
 from datetime import datetime
 
@@ -14,9 +14,13 @@ from agentproof.api.schemas import (
     TimeseriesResponse,
     TopTracesResponse,
     TraceInfo,
+    WasteDetailItem,
+    WasteReportResponse,
     WasteScoreResponse,
 )
-from agentproof.db.queries import get_summary_stats, get_timeseries, get_top_traces
+from agentproof.api.waste import compute_waste_score
+from agentproof.db.queries import get_summary_stats, get_timeseries, get_top_traces, get_waste_analysis
+from agentproof.waste.analyzer import WasteAnalyzer
 
 router = APIRouter(prefix="/stats")
 
@@ -122,9 +126,51 @@ async def waste_score(
     org_id: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> WasteScoreResponse:
-    """Placeholder waste score — real implementation in 0B-5/0C-2."""
-    return WasteScoreResponse(
-        waste_score=0.0,
-        total_potential_savings_usd=0.0,
-        breakdown=[],
+    """Heuristic waste score: what fraction of spend could be saved by using cheaper models.
+
+    Backward-compatible with the v0 response schema. Uses the v0
+    heuristic scorer so existing dashboard consumers continue to work.
+    The detailed analyzer is available via /waste/details.
+    """
+    start, end = resolve_time_range(start, end)
+    rows = await get_waste_analysis(db, start, end, org_id)
+    return compute_waste_score(rows)
+
+
+@router.get("/waste/details", response_model=WasteReportResponse)
+async def waste_details(
+    start: datetime | None = None,
+    end: datetime | None = None,
+    org_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> WasteReportResponse:
+    """Full waste analysis with per-detector breakdown.
+
+    Runs all five waste detectors (model overkill, redundant calls,
+    context bloat, cache misses, agent loops) and returns a unified
+    report with dollar amounts and actionable recommendations.
+    """
+    start, end = resolve_time_range(start, end)
+    analyzer = WasteAnalyzer()
+    report = await analyzer.analyze(db, start, end, org_id=org_id)
+
+    return WasteReportResponse(
+        items=[
+            WasteDetailItem(
+                category=item.category.value,
+                severity=item.severity.value,
+                affected_trace_ids=item.affected_trace_ids,
+                call_count=item.call_count,
+                current_cost=item.current_cost,
+                projected_cost=item.projected_cost,
+                savings=item.savings,
+                description=item.description,
+                confidence=item.confidence,
+            )
+            for item in report.items
+        ],
+        total_savings=report.total_savings,
+        total_spend=report.total_spend,
+        waste_score=report.waste_score,
+        generated_at=report.generated_at.isoformat() if report.generated_at else None,
     )

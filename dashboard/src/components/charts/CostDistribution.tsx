@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -11,36 +12,45 @@ import { CardShell } from "../common/CardShell";
 import { useSummary } from "../../hooks/useStats";
 import type { TimeRange } from "../../hooks/useStats";
 import { modelColor } from "./modelColors";
+import { formatUSD } from "../../utils/format";
 
 interface Props {
   timeRange: TimeRange;
 }
 
-function formatUSD(value: number): string {
-  if (value >= 1) return `$${value.toFixed(2)}`;
-  return `$${value.toFixed(4)}`;
+interface ChartEntry {
+  key: string;
+  value: number;
 }
 
 interface TooltipPayload {
   value: number;
-  payload: { key: string };
+  payload: ChartEntry;
+}
+
+function sanitizeId(s: string): string {
+  return s.replace(/[^a-zA-Z0-9]/g, "-");
 }
 
 function CustomTooltip({
   active,
   payload,
+  totalSpend,
 }: {
   active?: boolean;
   payload?: TooltipPayload[];
+  totalSpend: number;
 }) {
   if (!active || !payload?.length) return null;
   const item = payload[0];
+  const pct = totalSpend > 0 ? (item.value / totalSpend) * 100 : 0;
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-xs">
+    <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded px-3 py-2 text-xs">
       <p className="text-gray-300 font-mono mb-1">{item.payload.key}</p>
       <p className="font-mono" style={{ color: modelColor(item.payload.key) }}>
         {formatUSD(item.value)}
       </p>
+      <p className="text-gray-500 mt-0.5">{pct.toFixed(1)}% of total spend</p>
     </div>
   );
 }
@@ -48,12 +58,19 @@ function CustomTooltip({
 export function CostDistribution({ timeRange }: Props) {
   const { data, isLoading, error } = useSummary(timeRange, "model");
 
-  // Sort descending by cost so the biggest spenders appear at top
-  const chartData = [...(data?.groups ?? [])]
-    .sort((a, b) => b.total_cost_usd - a.total_cost_usd)
-    .map((g) => ({ key: g.key, value: g.total_cost_usd }));
+  const chartData = useMemo(
+    () =>
+      [...(data?.groups ?? [])]
+        .sort((a, b) => b.total_cost_usd - a.total_cost_usd)
+        .map((g) => ({ key: g.key, value: g.total_cost_usd })),
+    [data]
+  );
 
-  // Dynamic height: at least 160px, grows with number of bars (28px each)
+  const totalSpend = useMemo(
+    () => chartData.reduce((sum, d) => sum + d.value, 0),
+    [chartData]
+  );
+
   const chartHeight = Math.max(160, chartData.length * 28 + 16);
 
   return (
@@ -73,6 +90,18 @@ export function CostDistribution({ timeRange }: Props) {
             data={chartData}
             margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
           >
+            <defs>
+              {chartData.map((entry) => {
+                const color = modelColor(entry.key);
+                const id = `bar-${sanitizeId(entry.key)}`;
+                return (
+                  <linearGradient key={id} id={id} x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor={color} stopOpacity={0.6} />
+                    <stop offset="100%" stopColor={color} stopOpacity={1} />
+                  </linearGradient>
+                );
+              })}
+            </defs>
             <XAxis
               type="number"
               tickFormatter={formatUSD}
@@ -88,10 +117,16 @@ export function CostDistribution({ timeRange }: Props) {
               tickLine={false}
               axisLine={false}
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: "#1f2937" }} />
+            <Tooltip
+              content={<CustomTooltip totalSpend={totalSpend} />}
+              cursor={{ fill: "#1f2937" }}
+            />
             <Bar dataKey="value" radius={[0, 2, 2, 0]} maxBarSize={18}>
               {chartData.map((entry) => (
-                <Cell key={entry.key} fill={modelColor(entry.key)} />
+                <Cell
+                  key={entry.key}
+                  fill={`url(#bar-${sanitizeId(entry.key)})`}
+                />
               ))}
             </Bar>
           </BarChart>

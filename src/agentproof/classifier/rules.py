@@ -5,11 +5,12 @@ classify task type. Deterministic, zero external dependencies,
 debuggable via the signals list.
 """
 
+import re
+
 from agentproof.classifier.taxonomy import ClassificationResult, ClassifierInput
 from agentproof.types import TaskType
 
-# Keywords that strongly signal a particular task type
-_TASK_KEYWORDS: dict[TaskType, list[str]] = {
+TASK_KEYWORDS: dict[TaskType, list[str]] = {
     TaskType.CLASSIFICATION: [
         "classify", "categorize", "label", "sentiment", "detect", "identify",
     ],
@@ -27,7 +28,49 @@ _TASK_KEYWORDS: dict[TaskType, list[str]] = {
         "explain", "why", "reason", "analyze", "think step",
         "chain of thought", "let's think",
     ],
+    TaskType.CONVERSATION: [
+        "chat", "converse", "assistant", "dialogue", "help",
+    ],
+    TaskType.TOOL_SELECTION: [
+        "select tool", "pick tool", "choose function", "use tool",
+    ],
 }
+
+# Precompile word-boundary regexes for single-word keywords so the hot-path
+# classifier doesn't pay re.compile cost on every call.
+_WORD_PATTERNS: dict[str, re.Pattern[str]] = {}
+for _kw_list in TASK_KEYWORDS.values():
+    for _kw in _kw_list:
+        if " " not in _kw and _kw not in _WORD_PATTERNS:
+            _WORD_PATTERNS[_kw] = re.compile(r"\b" + re.escape(_kw) + r"\b")
+
+
+def _matches_keyword(text: str, keyword: str) -> bool:
+    """Check whether *keyword* appears in *text* as a whole word.
+
+    Multi-word phrases use plain substring matching (they're unlikely to
+    cause false positives). Single-word keywords use a precompiled
+    word-boundary regex to avoid hits like "class" inside "classify".
+    """
+    if " " in keyword:
+        return keyword in text
+    return bool(_WORD_PATTERNS[keyword].search(text))
+
+
+def extract_keywords(text: str) -> list[str]:
+    """Scan text for classifier-relevant keywords from TASK_KEYWORDS."""
+    lower = text.lower()
+    found: list[str] = []
+    for keywords in TASK_KEYWORDS.values():
+        for kw in keywords:
+            if _matches_keyword(lower, kw):
+                found.append(kw)
+    return found
+
+
+def compute_token_ratio(prompt_tokens: int, completion_tokens: int) -> float:
+    """Safe division for token ratio used by ClassifierInput."""
+    return completion_tokens / prompt_tokens if prompt_tokens > 0 else 0.0
 
 
 def classify(task_input: ClassifierInput) -> ClassificationResult:
@@ -66,7 +109,7 @@ def classify(task_input: ClassifierInput) -> ClassificationResult:
         scores[TaskType.REASONING] += 0.2
 
     # Signal: keyword matching from system prompt
-    for task_type, keywords in _TASK_KEYWORDS.items():
+    for task_type, keywords in TASK_KEYWORDS.items():
         matched = [kw for kw in keywords if kw in task_input.system_prompt_keywords]
         if matched:
             signals.append(f"keywords_{task_type.value}:{','.join(matched)}")
@@ -96,8 +139,10 @@ def classify(task_input: ClassifierInput) -> ClassificationResult:
     best_type = max(scores, key=lambda t: scores[t])
     best_score = scores[best_type]
 
-    # Normalize confidence to 0-1 range (cap at 1.0)
-    confidence = min(best_score / 1.5, 1.0)
+    # Normalize confidence to 0-1 range (cap at 1.0).
+    # Round to 10 decimal places to avoid IEEE 754 float artifacts
+    # (e.g. 0.3/1.5 producing 0.19999999999999998 instead of 0.2).
+    confidence = round(min(best_score / 1.5, 1.0), 10)
 
     # If confidence is too low, fall back to UNKNOWN
     if confidence < 0.2:

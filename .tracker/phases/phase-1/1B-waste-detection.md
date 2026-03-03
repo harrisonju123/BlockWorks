@@ -1,6 +1,6 @@
 # 1B — Waste Detection & Recommendations
 
-**Status:** not started
+**Status:** done
 **Owner:** ml + fe
 **Target:** Weeks 10–14
 **Dependencies:** 0B (classifier), 1A (fitness matrix)
@@ -8,23 +8,25 @@
 
 ## Objective
 
-Analyze usage patterns and flag specific waste categories with dollar amounts. This is the feature that makes the "we saved you $X" claim concrete.
+Analyze usage patterns and flag specific waste categories with dollar amounts.
 
 ## Tasks
 
-- [ ] **1B-1** **Model overkill detector** — compare task classification against fitness matrix, flag when expensive model used for task where cheaper model scores >90% — `ml`
-- [ ] **1B-2** **Redundant call detector** — identify identical tool calls within a trace (hash input args, flag duplicates) — `ml`
-- [ ] **1B-3** **Context bloat analyzer** — measure system prompt token count vs output influence (ablation heuristic or token-level analysis) — `ml`
-- [ ] **1B-4** **Cache miss detector** — semantic similarity between requests within configurable time window, estimate savings from prompt caching — `ml`
-- [ ] **1B-5** **Agent loop detector** — pattern match fix-break-fix cycles in coding agent traces (repeated similar edits to same file) — `ml`
-- [ ] **1B-6** Weekly waste report generation — email/Slack-ready format with $ amounts per category — `fe`
+- [x] **1B-1** Model overkill detector — fitness matrix comparison — `ml` (done 2026-03-03)
+- [x] **1B-2** Redundant call detector — hash-based duplicate detection — `ml` (done 2026-03-03)
+- [x] **1B-3** Context bloat analyzer — system prompt vs completion token ratio — `ml` (done 2026-03-03)
+- [x] **1B-4** Cache miss detector — prompt_hash duplicates within time window — `ml` (done 2026-03-03)
+- [x] **1B-5** Agent loop detector — fix-break-fix cycle pattern matching — `ml` (done 2026-03-03)
+- [x] **1B-6** Weekly waste report generation — plain text + Slack blocks — `fe` (done 2026-03-03)
 
 ## Technical Notes
 
-- Each detector outputs: category, severity, affected traces, estimated monthly savings
-- Waste score = weighted sum of detector outputs normalized to 0–100
-- Reports should be actionable: "Switch these 340 classification calls from Opus to Haiku → save $1,200/month"
-- Agent loop detection: look for repeated tool calls to same file/function with rollbacks between them
+- `src/agentproof/waste/` package: types, 5 detectors, analyzer, report formatter
+- Each detector is a pure function (mock-testable, no DB coupling)
+- Analyzer orchestrates all detectors and computes overall waste_score
+- CLI: `agentproof waste-report`
+- API: `GET /api/v1/stats/waste/details` (backward-compatible with existing /waste-score)
+- 68 unit tests
 
 ## Blockers
 
