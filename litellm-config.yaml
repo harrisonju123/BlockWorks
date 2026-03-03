@@ -1,0 +1,116 @@
+# =============================================================================
+# AgentProof LiteLLM Proxy Configuration
+# =============================================================================
+# This proxy sits between AI coding agents (Claude Code, OpenCode, etc.) and
+# the upstream LLM providers. Every request flows through the AgentProof
+# callback, which captures events for observability without blocking the
+# request path.
+#
+# Agents connect to http://localhost:4000 using the master key below.
+# Real provider API keys are read from environment variables on the server side.
+# =============================================================================
+
+# -- Model list ---------------------------------------------------------------
+# Each entry creates a routable alias. Agents request the `model_name`;
+# LiteLLM translates it to the real `model` and attaches the correct API key.
+#
+# Duplicate model_name entries let LiteLLM load-balance or fail over, but for
+# local dev a single entry per alias is fine.
+#
+# When an agent sends a model name that doesn't match any alias, the request
+# fails with "model not found". Fix by adding the exact name the agent sends.
+# -----------------------------------------------------------------------------
+model_list:
+
+  # ── Anthropic (Claude) ────────────────────────────────────────────────────
+  # Short aliases for convenience
+  - model_name: claude-opus
+    litellm_params:
+      model: claude-opus-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-haiku
+    litellm_params:
+      model: claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Full model IDs — Claude Code sends these by default
+  - model_name: claude-opus-4-20250514
+    litellm_params:
+      model: claude-opus-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-sonnet-4-20250514
+    litellm_params:
+      model: claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Opus 4.6 — Claude Code's current default model
+  - model_name: claude-opus-4-6
+    litellm_params:
+      model: claude-opus-4-6-20250527
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-opus-4-6-20250527
+    litellm_params:
+      model: claude-opus-4-6-20250527
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Legacy aliases some tools still reference
+  - model_name: claude-3-5-sonnet
+    litellm_params:
+      model: claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-3-5-sonnet-20241022
+    litellm_params:
+      model: claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # ── OpenAI ────────────────────────────────────────────────────────────────
+  - model_name: gpt-4o
+    litellm_params:
+      model: gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: o3-mini
+    litellm_params:
+      model: o3-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+# -- LiteLLM settings --------------------------------------------------------
+# callbacks:    AgentProof's custom callback captures every request/response.
+#               The callback hashes content, classifies the task, and writes
+#               events to TimescaleDB asynchronously (never blocks the LLM call).
+# drop_params:  Silently drop params the upstream provider doesn't support,
+#               rather than erroring. Necessary because different agents send
+#               different param sets.
+# set_verbose:  Keep false in normal use. Set true to debug routing issues.
+# -----------------------------------------------------------------------------
+litellm_settings:
+  callbacks: ["agentproof.pipeline.callback.AgentProofCallback"]
+  set_verbose: false
+  drop_params: true
+
+# -- General settings ---------------------------------------------------------
+# master_key:   Agents authenticate to the proxy with this key. For local dev
+#               only — not a secret. Set ANTHROPIC_API_KEY / OPENAI_API_KEY in
+#               .env for the real provider credentials.
+# -----------------------------------------------------------------------------
+general_settings:
+  master_key: sk-local-dev-key
