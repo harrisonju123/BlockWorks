@@ -60,12 +60,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Unit tests | 1377 passing |
+| Unit tests | 1382 passing |
 | Source packages | 25 (pipeline, classifier, api, cli, benchmarking, mcp, alerts, waste, routing, attestation, billing, compliance, channels, validators, governance, trust, sdk, fitness, registry, enterprise, workflows, revenue, interop) |
 | Solidity contracts | 6 (Attestation, Channel, Staking, Token, Trust, Revenue) |
 | API endpoints | 60+ |
 | SQL schemas | 4 (schema.sql, schema_benchmarks.sql, schema_mcp.sql, schema_alerts.sql) |
-| API endpoints | 20+ |
 | Integration guides | 4 (Claude Code, OpenCode, LangChain, CrewAI) |
 | ADRs | 4 (Phase 0 arch, Phase 1 arch, Attestation protocol) |
 
@@ -80,18 +79,25 @@
 DONE:  0A → 0B → 1A → 1B + 1C (full intelligence layer)
 DONE:  0A → 0C → 1E (alerts & budgets)
 DONE:  0A → 1D (MCP tracing)
-NOW:   2A design complete → 2A-4/5/6 implementation
-NEXT:  2A → 2B/2C/2D (parallel) → 2E (state channels)
+DONE:  2A → 2B/2C/2D (parallel) → 2E (state channels)
+DONE:  3A/3B/3C/3D/3E (protocol & network)
+DONE:  4A/4B/4C/4D/4E (marketplace)
+DONE:  Tech debt backlog (7 items)
 ```
 
 ## Technical Debt / Simplify Backlog
 
-Items noted during code reviews, not blocking but should be addressed:
+Completed (2026-03-03):
 
-- [ ] Extract `AsyncQueueWorker` base class (EventWriter, MCPWriter, BenchmarkWorker share ~80 lines)
-- [ ] Consolidate `MCPCallStatus` into `EventStatus` (identical enums)
-- [ ] Consolidate `MODEL_DOWNGRADE_MAP` with waste.py `MODEL_COST_TIERS`
-- [ ] Type `BenchmarkResult.task_type` as `TaskType` enum (currently `str`)
-- [ ] MCP response schema types duplicate `mcp/types.py` models
-- [ ] Add `utcnow()` helper for consistent timestamp generation
-- [ ] Keyword substring matching produces false positives ("class" matches "classify")
+- [x] Extract `AsyncQueueWorker` base class — `pipeline/base_worker.py`, EventWriter/MCPWriter/BenchmarkWorker refactored
+- [x] Consolidate `MCPCallStatus` into `EventStatus` — alias removed, all refs updated
+- [x] Consolidate `MODEL_DOWNGRADE_MAP` with `MODEL_COST_TIERS` — unified into `models.py` `MODEL_CATALOG`
+- [x] Type `BenchmarkResult.task_type` as `TaskType` enum
+- [x] MCP response schema dedup — `MCPServerStatsItem` removed, uses canonical `MCPServerStats`
+- [x] Add `utcnow()` helper — `utils.py`, applied to 29 files (53 call sites)
+- [x] Fix keyword substring false positives — word-boundary regex for single-word keywords
+
+Remaining:
+
+- [ ] `BenchmarkWorker._flush` raises `NotImplementedError` — consider splitting `AsyncPoolWorker` / `AsyncQueueWorker`
+- [ ] `MCPWriter._call_queue` duplicates `self._queue` from base class

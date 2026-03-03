@@ -14,9 +14,6 @@ from pydantic import BaseModel, Field
 
 from agentproof.types import EventStatus
 
-# Backward-compat alias — MCPCallStatus was identical to EventStatus
-MCPCallStatus = EventStatus
-
 
 class MCPCall(BaseModel):
     """A single MCP tool invocation observed in an LLM response."""

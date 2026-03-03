@@ -9,13 +9,8 @@ tighten them with empirical data.
 from __future__ import annotations
 
 from agentproof.api.schemas import WasteBreakdownItem, WasteScoreResponse
-from agentproof.models import MODEL_CATALOG, ModelInfo, get_tier
+from agentproof.models import MODEL_CATALOG, get_tier
 from agentproof.types import TaskType
-
-# Backward-compat aliases so downstream code that imports from here keeps working.
-# New code should import directly from agentproof.models.
-ModelCostInfo = ModelInfo
-MODEL_COST_TIERS = MODEL_CATALOG
 
 # Pre-built str -> TaskType lookup for O(1) conversion instead of enum constructor scan
 _TASK_TYPE_MAP: dict[str, TaskType] = {t.value: t for t in TaskType}

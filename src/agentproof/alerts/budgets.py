@@ -9,15 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agentproof.alerts.types import AlertSeverity, BudgetAction, BudgetConfig
-from agentproof.models import MODEL_CATALOG, get_downgrade
-
-# Backward-compat alias — tests and external callers that referenced the old dict
-# can still import it from here. Derived from MODEL_CATALOG at import time.
-MODEL_DOWNGRADE_MAP: dict[str, str] = {
-    model: info.downgrade_to
-    for model, info in MODEL_CATALOG.items()
-    if info.downgrade_to is not None
-}
+from agentproof.models import get_downgrade
 
 
 @dataclass(frozen=True)

@@ -66,14 +66,18 @@ API routes go in `src/agentproof/api/routes/<feature>.py` and register in `app.p
 
 ### Async Background Workers
 
-Three workers exist (EventWriter, MCPWriter, BenchmarkWorker) that share this pattern:
-- `asyncio.Queue` → background `run()` loop → batch flush via COPY → graceful `shutdown()`
-- `_shutdown_event: asyncio.Event` for cooperative stop
-- `_flush_with_retry` with 3 attempts + individual-insert fallback
-- Drain phase on `CancelledError` before closing pool
+`AsyncQueueWorker[T]` in `pipeline/base_worker.py` is the shared base class. Three workers extend it:
+- `EventWriter(AsyncQueueWorker[LLMEvent])` — uses default `run()` loop, implements `_flush()` for COPY
+- `MCPWriter(AsyncQueueWorker[MCPCall])` — overrides `run()` for dual queues (calls + edges)
+- `BenchmarkWorker(AsyncQueueWorker[_BenchmarkItem])` — overrides `run()` for per-item API replay
+
+Base class provides: pool management (`_ensure_pool`, `_close_pool`), `shutdown()` via `asyncio.Event`, `_flush_with_retry` with 3 attempts + individual fallback, and a default batch-drain-flush `run()` loop.
 - Parent callback exposes `close(timeout)` that calls `shutdown()` + waits + cancels
 
-**Known debt:** These should be extracted into a shared `AsyncQueueWorker` base class.
+### Shared Utilities
+
+- `utils.py` has `utcnow()` — use instead of `datetime.now(timezone.utc)` for consistent timestamps and easy mocking
+- `models.py` has `MODEL_CATALOG`, `ModelInfo`, `get_downgrade()`, `get_tier()` — single source of truth for model metadata
 
 ### Query Patterns
 
@@ -113,7 +117,7 @@ Three workers exist (EventWriter, MCPWriter, BenchmarkWorker) that share this pa
 
 ### Waste Scoring
 
-- `api/waste.py` has `ModelCostInfo` dataclass and `MODEL_COST_TIERS` dict — source of truth for model pricing
+- `models.py` has `ModelInfo` dataclass and `MODEL_CATALOG` dict — single source of truth for model pricing, tiers, and downgrade paths
 - `_suggest_model()` returns `(str | None, bool)` — None when not flagged
 - `compute_waste_score()` takes raw DB rows, returns typed `WasteScoreResponse`
 
