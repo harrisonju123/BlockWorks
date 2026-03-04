@@ -30,7 +30,7 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
-  const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const [timeRange, setTimeRange] = useState<TimeRange>("30d");
 
   return (
     <BrowserRouter>

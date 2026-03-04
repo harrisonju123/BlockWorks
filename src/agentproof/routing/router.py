@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 from agentproof.benchmarking.types import FitnessEntry
+from agentproof.models import MODEL_CATALOG
 from agentproof.routing.types import (
     QUALITY_FLOOR,
     RoutingDecision,
@@ -20,6 +21,84 @@ from agentproof.routing.types import (
     RoutingRule,
     SelectionCriteria,
 )
+from agentproof.types import TaskType
+
+# Synthetic fitness defaults by model tier — used when no benchmark data exists
+_TIER_DEFAULTS: dict[int, dict[str, float]] = {
+    1: {"quality": 0.95, "latency": 2000.0},
+    2: {"quality": 0.85, "latency": 1000.0},
+    3: {"quality": 0.75, "latency": 500.0},
+}
+
+
+def _get_tier_models() -> dict[int, str]:
+    """Return user's configured tier->model mapping."""
+    from agentproof.config import get_config
+    cfg = get_config()
+    return {1: cfg.routing_model_high, 2: cfg.routing_model_mid, 3: cfg.routing_model_low}
+
+
+def generate_synthetic_fitness() -> list[FitnessEntry]:
+    """Build synthetic FitnessEntry objects for the 3 configured tier models.
+
+    Quality comes from the assigned tier (high=0.95, mid=0.85, low=0.75),
+    cost from MODEL_CATALOG. sample_size=0 marks them as synthetic so real
+    benchmark data overwrites them via merge_fitness_entries.
+    """
+    tier_models = _get_tier_models()
+    entries: list[FitnessEntry] = []
+    task_types = [t for t in TaskType if t != TaskType.UNKNOWN]
+
+    for tier, model_name in tier_models.items():
+        info = MODEL_CATALOG.get(model_name)
+        if info is None:
+            continue
+        defaults = _TIER_DEFAULTS.get(tier)
+        if defaults is None:
+            continue
+        for task_type in task_types:
+            entries.append(
+                FitnessEntry(
+                    task_type=task_type.value,
+                    model=model_name,
+                    avg_quality=defaults["quality"],
+                    avg_cost=info.avg_cost,
+                    avg_latency=defaults["latency"],
+                    sample_size=0,
+                )
+            )
+    return entries
+
+
+def merge_fitness_entries(
+    synthetic: list[FitnessEntry], real: list[FitnessEntry]
+) -> list[FitnessEntry]:
+    """Merge synthetic base with real benchmark data.
+
+    Synthetic entries provide the baseline for the 3 tier models. Real entries
+    with sample_size > 0 overwrite tier-model synthetics and introduce new
+    models discovered via benchmarking.
+
+    Quality and latency come from real benchmarks. Cost always comes from
+    MODEL_CATALOG's per-1k-token pricing (DB benchmark_cost is per-request
+    and can't be compared across models for routing).
+    """
+    by_key: dict[tuple[str, str], FitnessEntry] = {
+        (e.model, e.task_type): e for e in synthetic
+    }
+    for entry in real:
+        if entry.sample_size > 0:
+            info = MODEL_CATALOG.get(entry.model)
+            normalized_cost = info.avg_cost if info is not None else entry.avg_cost
+            by_key[(entry.model, entry.task_type)] = FitnessEntry(
+                task_type=entry.task_type,
+                model=entry.model,
+                avg_quality=entry.avg_quality,
+                avg_cost=normalized_cost,
+                avg_latency=entry.avg_latency,
+                sample_size=entry.sample_size,
+            )
+    return list(by_key.values())
 
 
 class FitnessCache:
@@ -56,6 +135,10 @@ class FitnessCache:
     @property
     def is_empty(self) -> bool:
         return len(self._entries) == 0
+
+    def get_all_entries(self) -> list[FitnessEntry]:
+        """Return a snapshot of all cached entries."""
+        return list(self._entries)
 
     def get_entries_for_task(self, task_type: str) -> list[FitnessEntry]:
         """Return cached entries for a task type, already sorted by quality desc."""
@@ -94,6 +177,14 @@ def _apply_criteria(
     elif rule.criteria == SelectionCriteria.HIGHEST_QUALITY_UNDER_COST:
         # Sort by quality descending (already sorted this way from cache)
         viable = sorted(candidates, key=lambda e: e.avg_quality, reverse=True)
+
+    elif rule.criteria == SelectionCriteria.BEST_VALUE:
+        # Quality per unit cost — higher is better
+        viable = sorted(
+            candidates,
+            key=lambda e: e.avg_quality / max(e.avg_cost, 1e-7),
+            reverse=True,
+        )
 
     else:
         return None

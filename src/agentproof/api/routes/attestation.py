@@ -170,7 +170,7 @@ async def verify_chain_integrity(org_id_hash: str) -> VerifyResponse:
 
     # LocalProvider exposes its internal store for a full chain walk.
     # For EVM, we trust the contract's nonce sequencing (enforced on-chain).
-    from agentproof.attestation.local_provider import LocalProvider
+    from agentproof.attestation.local_provider import ZERO_HASH, LocalProvider
 
     if isinstance(provider, LocalProvider):
         for nonce in range(1, latest_nonce + 1):
@@ -184,7 +184,7 @@ async def verify_chain_integrity(org_id_hash: str) -> VerifyResponse:
             records_checked += 1
 
             if nonce == 1:
-                if record.prev_hash != "":
+                if record.prev_hash not in ("", ZERO_HASH):
                     chain_valid = False
                     first_broken = nonce
                     break

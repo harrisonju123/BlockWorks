@@ -76,6 +76,24 @@ def should_sample(
     return random.random() < config.sample_rate
 
 
+def _strip_tool_messages(messages: list[dict]) -> list[dict]:
+    """Remove tool-calling artifacts from replay messages.
+
+    Benchmark replays can't include tool definitions (not captured),
+    so strip tool_calls and tool-result messages to avoid provider errors.
+    """
+    cleaned = []
+    for msg in messages:
+        if msg.get("role") == "tool":
+            continue
+        if msg.get("role") == "assistant" and "tool_calls" in msg:
+            msg = {k: v for k, v in msg.items() if k != "tool_calls"}
+            if not msg.get("content"):
+                msg["content"] = ""
+        cleaned.append(msg)
+    return cleaned
+
+
 async def _replay_prompt(
     messages: list[dict],
     model: str,
@@ -98,6 +116,8 @@ async def _replay_prompt(
         )
         if sys_text:
             replay_messages = [{"role": "system", "content": sys_text}] + messages
+
+    replay_messages = _strip_tool_messages(replay_messages)
 
     start = time.monotonic()
     response = await litellm.acompletion(
@@ -160,6 +180,11 @@ async def run_benchmark_for_event(
                 rubric_version=rubric_version,
                 org_id=event.org_id,
             )
+        except litellm.AuthenticationError:
+            logger.warning(
+                "Skipping benchmark model=%s — missing API key", model
+            )
+            return None
         except Exception:
             logger.exception(
                 "Benchmark failed for event=%s model=%s", event.id, model

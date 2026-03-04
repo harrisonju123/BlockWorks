@@ -21,6 +21,7 @@ class SelectionCriteria(str, enum.Enum):
     CHEAPEST_ABOVE_QUALITY = "cheapest_above_quality"
     FASTEST_ABOVE_QUALITY = "fastest_above_quality"
     HIGHEST_QUALITY_UNDER_COST = "highest_quality_under_cost"
+    BEST_VALUE = "best_value"
 
 
 class RoutingRule(BaseModel):

@@ -63,3 +63,57 @@ class ConsensusResult(BaseModel):
     submissions: list[ValidationSubmission] = Field(default_factory=list)
     consensus_reached: bool = False
     agreement_threshold: int = 2
+    # Stake-weighted fields (populated by StakeWeightedConsensusEngine)
+    yes_stake: float = 0.0
+    total_participating_stake: float = 0.0
+    supermajority_reached: bool = False
+
+
+# ── Multi-validator consensus types ──────────────────────────────────
+
+
+class ProposalStatus(str, Enum):
+    PENDING = "pending"
+    FINALIZED = "finalized"
+    EXPIRED = "expired"
+    SLASHED = "slashed"
+
+
+class ConsensusProposal(BaseModel):
+    """Off-chain mirror of the on-chain Proposal struct."""
+
+    proposal_id: str
+    org_id_hash: str
+    period_start: datetime
+    period_end: datetime
+    metrics_hash: str
+    benchmark_hash: str
+    merkle_root: str
+    prev_hash: str
+    attest_nonce: int
+    proposer: str
+    created_at: datetime
+    total_participating_stake: float = 0.0
+    yes_stake: float = 0.0
+    status: ProposalStatus = ProposalStatus.PENDING
+    voters: list[str] = Field(default_factory=list)
+    yes_voters: list[str] = Field(default_factory=list)
+
+
+class ChallengeStatus(str, Enum):
+    PENDING = "pending"
+    RESOLVED_CHALLENGER_WON = "resolved_challenger_won"
+    RESOLVED_CHALLENGER_LOST = "resolved_challenger_lost"
+
+
+class AttestationChallenge(BaseModel):
+    """Off-chain mirror of the on-chain Challenge struct."""
+
+    challenge_id: str
+    proposal_id: str
+    challenger: str
+    bond: float
+    disputed_leaf_hash: str
+    filed_at: datetime
+    response_deadline: datetime
+    status: ChallengeStatus = ChallengeStatus.PENDING

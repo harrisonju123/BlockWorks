@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import type { TimeRange } from "../hooks/useStats";
 import { useEvents, type EventFilters } from "../hooks/useEvents";
 import { CardShell } from "../components/common/CardShell";
+import { InfoTip } from "../components/common/InfoTip";
 import { EventDrawer } from "../components/EventDrawer";
 import { formatUSD, formatMs } from "../utils/format";
 
@@ -15,6 +16,7 @@ const STATUS_OPTIONS = ["all", "success", "failure"] as const;
 const TASK_TYPES = [
   "all",
   "code_generation",
+  "code_review",
   "classification",
   "summarization",
   "extraction",
@@ -80,7 +82,7 @@ export function Events({ timeRange }: Props) {
 
   return (
     <div className="flex flex-col gap-4 max-w-[1600px] mx-auto">
-      <h1 className="text-lg font-semibold">Events Explorer</h1>
+      <h1 className="text-lg font-semibold flex items-center gap-2">Events Explorer <InfoTip text="Every LLM API call captured by the proxy or callback, with classification and cost data. Click any row for full details." /></h1>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">

@@ -14,7 +14,7 @@ import type {
   BenchmarkResultsResponse,
   BenchmarkConfig,
   DriftResponse,
-  RoutingPolicy,
+  PolicyResponse,
   DecisionsResponse,
   DryRunReport,
   MCPServersResponse,
@@ -181,7 +181,7 @@ export async function getBenchmarkDrift(
 
 // -- Routing ------------------------------------------------------------------
 
-export async function getRoutingPolicy(): Promise<RoutingPolicy> {
+export async function getRoutingPolicy(): Promise<PolicyResponse> {
   return fetchJson(`${API_BASE}/routing/policy`);
 }
 
@@ -192,6 +192,13 @@ export async function getRoutingDecisions(
   return fetchJson(`${API_BASE}/routing/decisions`, {
     limit: String(limit),
     offset: String(offset),
+  });
+}
+
+export async function toggleRouting(enabled: boolean): Promise<{ routing_enabled: boolean }> {
+  return mutateJson(`${API_BASE}/routing/toggle`, {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
   });
 }
 

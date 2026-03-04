@@ -124,8 +124,24 @@ Simplify + code-review fixes applied:
 | I2 | Anvil Docker + auto-deploy (docker-compose, deploy-local.sh) | done |
 | I3 | EVMProvider implementation (web3.py async, factory auto-discovery) | done |
 | I4 | Attestation dashboard page (latest attestation, chain integrity) | done |
+| J1 | Multi-validator consensus contract (AgentProofConsensus.sol) | done |
+| J2 | StakeWeightedConsensusEngine + settle_challenge (Python) | done |
+| J3 | ConsensusProvider (proposal → vote → finalize flow) | done |
+| J4 | Consensus factory wiring + Deploy.s.sol update | done |
+| J5 | Foundry tests (34 tests) + Python tests (21 tests) | done |
 
-Simplify + code-review pending.
+Simplify + code-review applied:
+- Fixed infinite recursion in StakeWeightedConsensusEngine (inline agreeing set vs. recursive call)
+- Missing `datetime` import in consensus_provider.py
+- `_pending_records` getattr hack → proper `__init__`
+- `datetime.now(timezone.utc)` → `utcnow()` (2 places)
+- Private attr `_consensus._tolerance` → public `_consensus.tolerance`
+- Double iteration → single pass in check_consensus
+- `SUPERMAJORITY_RATIO` imported instead of hardcoded
+- `_verifyMerkleProof` view → pure
+- Split `ProposalExpired` / `ProposalNotExpired` errors
+- Admin setter bounds validation
+- `response_deadline=now` → `now + _CHALLENGE_PERIOD`
 
 ### Sprint 5+: Advanced Features (NOT STARTED)
 
@@ -133,10 +149,10 @@ Simplify + code-review pending.
 
 | Metric | Value |
 |--------|-------|
-| Unit tests | 1435 passing |
+| Unit tests | 1456 passing |
 | Integration tests | 20 (8 proxy-routing, 12 alerts-db) |
 | Source packages | 25 (pipeline, classifier, api, cli, benchmarking, mcp, alerts, waste, routing, attestation, billing, compliance, channels, validators, governance, trust, sdk, fitness, registry, enterprise, workflows, revenue, interop) |
-| Solidity contracts | 6 (Attestation, Channel, Staking, Token, Trust, Revenue) |
+| Solidity contracts | 7 (Attestation, Channel, Staking, Token, Trust, Revenue, Consensus) |
 | API endpoints | 60+ |
 | SQL schemas | 6 (schema.sql, schema_benchmarks.sql, schema_mcp.sql, schema_alerts.sql, schema_benchmark_config.sql, schema_routing.sql) |
 | Dashboard pages | 9 (Overview, Events, Alerts, Benchmarks, Waste, Routing, MCP Tracing, Attestations + Event Detail drawer) |

@@ -1,6 +1,6 @@
 """LLM-as-judge evaluation engine.
 
-Uses a small model (Haiku by default) to score LLM outputs against
+Uses Sonnet by default to score LLM outputs against
 task-specific rubrics. The judge never sees raw user content -- only
 the prompt/completion pair and the rubric. Scoring is fully async
 and runs in the background benchmark worker.
@@ -24,6 +24,36 @@ logger = logging.getLogger(__name__)
 RUBRIC_VERSION = "1.0"
 
 _RUBRICS: dict[TaskType, Rubric] = {
+    TaskType.CODE_REVIEW: Rubric(
+        task_type=TaskType.CODE_REVIEW,
+        version=RUBRIC_VERSION,
+        criteria=[
+            RubricCriterion(
+                name="bug_detection",
+                weight=0.4,
+                prompt=(
+                    "Does the review identify real bugs or issues in the code? "
+                    "Score 0.0 (misses everything) to 1.0 (catches all issues)."
+                ),
+            ),
+            RubricCriterion(
+                name="actionability",
+                weight=0.35,
+                prompt=(
+                    "Are the review comments actionable with clear suggestions for improvement? "
+                    "Score 0.0 (vague/unhelpful) to 1.0 (specific and actionable)."
+                ),
+            ),
+            RubricCriterion(
+                name="completeness",
+                weight=0.25,
+                prompt=(
+                    "Does the review cover all relevant aspects of the code change? "
+                    "Score 0.0 (very partial) to 1.0 (comprehensive coverage)."
+                ),
+            ),
+        ],
+    ),
     TaskType.CODE_GENERATION: Rubric(
         task_type=TaskType.CODE_GENERATION,
         version=RUBRIC_VERSION,
@@ -268,7 +298,7 @@ async def evaluate(
     original_completion: str,
     benchmark_completion: str,
     task_type: TaskType,
-    judge_model: str = "claude-haiku-4-5-20251001",
+    judge_model: str = "claude-sonnet-4-6",
 ) -> tuple[float, str]:
     """Score a benchmark completion against the original using the LLM-as-judge.
 

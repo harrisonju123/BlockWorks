@@ -55,7 +55,7 @@ def _suggest_model(task_type: TaskType, current_tier: int) -> tuple[str | None, 
             return _CHEAPEST_BY_TIER[2], True
         return None, False
 
-    if task_type in (TaskType.CODE_GENERATION, TaskType.REASONING):
+    if task_type in (TaskType.CODE_GENERATION, TaskType.CODE_REVIEW, TaskType.REASONING):
         if current_tier == 1:
             return _CHEAPEST_BY_TIER[2], True
         return None, False

@@ -8,6 +8,8 @@ import {
   useBenchmarkConfig,
 } from "../hooks/useBenchmarks";
 import { CardShell } from "../components/common/CardShell";
+import { InfoTip } from "../components/common/InfoTip";
+import { LabeledValue } from "../components/common/LabeledValue";
 import { formatUSD, formatMs } from "../utils/format";
 
 interface Props {
@@ -17,7 +19,7 @@ interface Props {
 export function Benchmarks({ timeRange }: Props) {
   return (
     <div className="flex flex-col gap-6 max-w-[1600px] mx-auto">
-      <h1 className="text-lg font-semibold">Benchmarks</h1>
+      <h1 className="text-lg font-semibold flex items-center gap-2">Benchmarks <InfoTip text="Automated quality testing. A sample of live traffic is replayed against alternative models and scored by an LLM judge." /></h1>
 
       {/* Config summary */}
       <ConfigBanner />
@@ -43,23 +45,15 @@ function ConfigBanner() {
 
   return (
     <div className="flex flex-wrap gap-4 bg-gray-800/50 rounded-lg px-4 py-3">
-      <Stat label="Status" value={config.enabled ? "Active" : "Disabled"}
+      <LabeledValue label="Status" value={config.enabled ? "Active" : "Disabled"}
         className={config.enabled ? "text-green-400" : "text-gray-500"} />
-      <Stat label="Sample Rate" value={`${(config.sample_rate * 100).toFixed(0)}%`} />
-      <Stat label="Models" value={config.benchmark_models.join(", ")} />
-      <Stat label="Judge" value={config.judge_model} />
+      <LabeledValue label="Sample Rate" value={`${(config.sample_rate * 100).toFixed(0)}%`} tip="Percentage of successful calls mirrored for benchmarking. Higher rates give better data but increase cost." />
+      <LabeledValue label="Models" value={config.benchmark_models.join(", ")} />
+      <LabeledValue label="Judge" value={config.judge_model} tip="The model used to score benchmark replays on task-specific rubrics." />
     </div>
   );
 }
 
-function Stat({ label, value, className = "text-gray-200" }: { label: string; value: string; className?: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] text-gray-500 uppercase">{label}</span>
-      <span className={`text-xs font-mono ${className}`}>{value}</span>
-    </div>
-  );
-}
 
 // -- Fitness Matrix -----------------------------------------------------------
 
@@ -85,7 +79,7 @@ function FitnessMatrix({ timeRange }: { timeRange: TimeRange }) {
   }, [data?.entries]);
 
   return (
-    <CardShell title="Fitness Matrix" loading={isLoading} error={error ?? null} skeletonHeight="h-64">
+    <CardShell title={<span className="flex items-center gap-1">Fitness Matrix <InfoTip text="Quality/cost/latency grid for every model–task combination. Cells show average scores from benchmark replays." /></span>} loading={isLoading} error={error ?? null} skeletonHeight="h-64">
       {models.length === 0 && (
         <p className="text-xs text-gray-500 py-4 text-center">No benchmark data yet</p>
       )}
@@ -139,7 +133,7 @@ function DriftDetection({ timeRange }: { timeRange: TimeRange }) {
   const { data, isLoading, error } = useBenchmarkDrift(timeRange);
 
   return (
-    <CardShell title="Quality Drift" loading={isLoading} error={error ?? null} skeletonHeight="h-48">
+    <CardShell title={<span className="flex items-center gap-1">Quality Drift <InfoTip text="Detects statistically significant drops in model quality over time using a rolling comparison with p-value threshold." /></span>} loading={isLoading} error={error ?? null} skeletonHeight="h-48">
       {data && data.drifts.length === 0 && (
         <p className="text-xs text-gray-500 py-4 text-center">No drift data available</p>
       )}

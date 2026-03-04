@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 interface CardShellProps {
-  title?: string;
+  title?: ReactNode;
   loading?: boolean;
   error?: Error | null;
   /** Skeleton height when loading, e.g. "h-48" */

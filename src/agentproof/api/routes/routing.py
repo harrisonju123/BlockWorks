@@ -30,7 +30,13 @@ from agentproof.routing.policy import (
     load_policy,
     validate_policy,
 )
-from agentproof.routing.router import FitnessCache, resolve
+from agentproof.models import MODEL_CATALOG
+from agentproof.routing.router import (
+    FitnessCache,
+    generate_synthetic_fitness,
+    merge_fitness_entries,
+    resolve,
+)
 from agentproof.routing.types import RoutingDecision, RoutingPolicy
 from agentproof.routing.writer import DecisionRecord
 
@@ -90,9 +96,18 @@ class PolicyUpdateRequest(BaseModel):
     version: int = 1
 
 
+class ToggleRequest(BaseModel):
+    enabled: bool
+
+
+class ToggleResponse(BaseModel):
+    routing_enabled: bool
+
+
 class PolicyResponse(BaseModel):
     policy: RoutingPolicy
     is_default: bool
+    routing_enabled: bool
 
 
 class DryRunRequest(BaseModel):
@@ -131,6 +146,7 @@ async def get_active_policy_endpoint(
     return PolicyResponse(
         policy=policy,
         is_default=len(policy.rules) == 0,
+        routing_enabled=getattr(request.app.state, "routing_enabled", False),
     )
 
 
@@ -159,6 +175,7 @@ async def update_policy(
     return PolicyResponse(
         policy=policy,
         is_default=len(policy.rules) == 0,
+        routing_enabled=getattr(request.app.state, "routing_enabled", False),
     )
 
 
@@ -255,6 +272,28 @@ async def get_ab_test_results() -> ABTestResultsResponse:
     )
 
 
+@router.post("/toggle", response_model=ToggleResponse)
+async def toggle_routing(body: ToggleRequest, request: Request) -> ToggleResponse:
+    """Enable or disable the routing engine at runtime."""
+    if body.enabled:
+        # Lazily initialize cache and policy so routing works immediately
+        cache = _get_fitness_cache(request)
+        if cache.is_empty:
+            cache.update(generate_synthetic_fitness())
+        # Only regenerate if using system-generated policy (preserve user-set policies)
+        policy = getattr(request.app.state, "routing_policy", None)
+        if policy is None or policy.version == 0:
+            request.app.state.routing_policy = default_policy(fitness_cache=cache)
+    request.app.state.routing_enabled = body.enabled
+    return ToggleResponse(routing_enabled=body.enabled)
+
+
+@router.get("/status", response_model=ToggleResponse)
+async def get_routing_status(request: Request) -> ToggleResponse:
+    """Return whether routing is currently enabled."""
+    return ToggleResponse(routing_enabled=getattr(request.app.state, "routing_enabled", False))
+
+
 def record_decision(decision: RoutingDecision) -> None:
     """Append a routing decision to the recent decisions buffer.
 
@@ -262,3 +301,88 @@ def record_decision(decision: RoutingDecision) -> None:
     The deque's maxlen=200 automatically evicts oldest entries.
     """
     _recent_decisions.append(decision)
+
+
+# -- Tier config ---------------------------------------------------------------
+
+
+class TierConfigResponse(BaseModel):
+    routing_model_high: str
+    routing_model_mid: str
+    routing_model_low: str
+    available_models: dict[int, list[str]]  # tier -> model names from catalog
+
+
+class TierConfigUpdateRequest(BaseModel):
+    routing_model_high: str | None = None
+    routing_model_mid: str | None = None
+    routing_model_low: str | None = None
+
+
+# Static grouping of MODEL_CATALOG by tier — catalog never changes at runtime.
+_MODELS_BY_TIER: dict[int, list[str]] = {}
+for _name, _info in MODEL_CATALOG.items():
+    _MODELS_BY_TIER.setdefault(_info.tier, []).append(_name)
+for _tier in _MODELS_BY_TIER:
+    _MODELS_BY_TIER[_tier].sort()
+
+
+@router.get("/tier-config", response_model=TierConfigResponse)
+async def get_tier_config() -> TierConfigResponse:
+    """Return the current tier model configuration."""
+    from agentproof.config import get_config
+    cfg = get_config()
+    return TierConfigResponse(
+        routing_model_high=cfg.routing_model_high,
+        routing_model_mid=cfg.routing_model_mid,
+        routing_model_low=cfg.routing_model_low,
+        available_models=_MODELS_BY_TIER,
+    )
+
+
+@router.put("/tier-config", response_model=TierConfigResponse)
+async def update_tier_config(
+    body: TierConfigUpdateRequest, request: Request,
+) -> TierConfigResponse:
+    """Update the tier model configuration at runtime.
+
+    Validates models against MODEL_CATALOG, regenerates synthetic fitness,
+    and clears the bootstrap policy cache. Runtime-only (not persisted
+    across restarts).
+    """
+    from agentproof.config import get_config
+    from agentproof.routing.policy import KNOWN_MODELS, clear_bootstrap_cache
+
+    cfg = get_config()
+    updates: dict[str, str] = {}
+    for field in ("routing_model_high", "routing_model_mid", "routing_model_low"):
+        val = getattr(body, field)
+        if val is not None:
+            if val not in KNOWN_MODELS:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown model '{val}'. Known: {sorted(KNOWN_MODELS)}",
+                )
+            updates[field] = val
+
+    # Mutate the cached config object
+    for field, val in updates.items():
+        object.__setattr__(cfg, field, val)
+
+    # Clear bootstrap cache so next call picks up new models
+    clear_bootstrap_cache()
+
+    # Regenerate synthetic fitness and merge with any existing real data
+    cache = _get_fitness_cache(request)
+    synthetic = generate_synthetic_fitness()
+    # Preserve real (sample_size > 0) entries already in the cache
+    existing_real = [e for e in cache.get_all_entries() if e.sample_size > 0]
+    merged = merge_fitness_entries(synthetic, existing_real)
+    cache.update(merged)
+
+    return TierConfigResponse(
+        routing_model_high=cfg.routing_model_high,
+        routing_model_mid=cfg.routing_model_mid,
+        routing_model_low=cfg.routing_model_low,
+        available_models=_MODELS_BY_TIER,
+    )

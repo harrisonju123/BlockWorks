@@ -80,4 +80,27 @@ def create_provider(provider_type: str | None = None, **kwargs: object) -> Attes
             private_key=str(private_key),
         )
 
+    if ptype == "consensus":
+        from agentproof.attestation.consensus_provider import ConsensusProvider
+        from agentproof.attestation.local_provider import LocalProvider
+        from agentproof.validators.consensus import StakeWeightedConsensusEngine
+        from agentproof.validators.economics import ValidatorEconomics
+        from agentproof.validators.registry import ValidatorRegistry
+
+        registry = kwargs.get("registry") or ValidatorRegistry(min_stake=0.1)
+        consensus_engine = kwargs.get("consensus") or StakeWeightedConsensusEngine(
+            registry=registry, min_quorum=3
+        )
+        economics = kwargs.get("economics") or ValidatorEconomics(
+            registry=registry, consensus=consensus_engine
+        )
+        inner = kwargs.get("inner") or LocalProvider()
+
+        return ConsensusProvider(
+            inner=inner,
+            registry=registry,
+            consensus=consensus_engine,
+            economics=economics,
+        )
+
     raise ValueError(f"Unknown attestation provider: {ptype}")

@@ -45,8 +45,8 @@ def compute_chain_hash(record: AttestationRecord) -> str:
     # Pack fields exactly as abi.encodePacked would
     packed = b""
     packed += bytes.fromhex(record.org_id_hash)  # bytes32
-    packed += struct.pack(">Q", int(record.period_start.timestamp()))[:5]  # uint40
-    packed += struct.pack(">Q", int(record.period_end.timestamp()))[:5]  # uint40
+    packed += struct.pack(">Q", int(record.period_start.timestamp()))[3:]  # uint40 (low 5 bytes)
+    packed += struct.pack(">Q", int(record.period_end.timestamp()))[3:]  # uint40 (low 5 bytes)
     packed += bytes.fromhex(record.metrics_hash)  # bytes32
     packed += bytes.fromhex(record.benchmark_hash)  # bytes32
     packed += bytes.fromhex(record.merkle_root)  # bytes32

@@ -1,8 +1,9 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getRoutingPolicy,
   getRoutingDecisions,
   postDryRun,
+  toggleRouting,
 } from "../api/client";
 
 export function useRoutingPolicy() {
@@ -20,6 +21,16 @@ export function useRoutingDecisions(limit = 50, offset = 0) {
     staleTime: 5_000,
     // Live feed: refetch every 5s so operators see decisions in near-real-time
     refetchInterval: 5_000,
+  });
+}
+
+export function useToggleRouting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => toggleRouting(enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["routing-policy"] });
+    },
   });
 }
 

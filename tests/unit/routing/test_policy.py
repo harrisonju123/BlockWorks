@@ -208,9 +208,9 @@ class TestValidatePolicy:
 
 class TestDefaultPolicy:
 
-    def test_default_policy_is_empty(self) -> None:
+    def test_default_policy_has_bootstrap_rules(self) -> None:
         policy = default_policy()
-        assert len(policy.rules) == 0
+        assert len(policy.rules) > 0
         assert policy.version == 0
 
     def test_default_policy_is_valid(self) -> None:

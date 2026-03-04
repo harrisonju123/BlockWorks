@@ -282,23 +282,30 @@ class AgentProofCallback(CustomLogger):
         # System prompt hash (first system message if present)
         system_prompt_hash = None
         system_prompt_keywords: list[str] = []
+        user_kw_set: set[str] = set()
         has_code_fence = False
         has_json_schema = False
         output_format_hint: str | None = None
 
         for msg in messages:
-            if isinstance(msg, dict) and msg.get("role") == "system":
-                content = msg.get("content", "")
-                system_prompt_hash = hash_content(content)
-                system_prompt_keywords = extract_keywords(content)
-                has_code_fence = "```" in content
-                has_json_schema = '"type"' in content and '"properties"' in content
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role")
+            content = msg.get("content", "")
+            if role == "system":
+                if system_prompt_hash is None:
+                    system_prompt_hash = hash_content(content)
+                system_prompt_keywords.extend(extract_keywords(content))
+                has_code_fence = has_code_fence or "```" in content
+                has_json_schema = has_json_schema or ('"type"' in content and '"properties"' in content)
                 content_lower = content.lower()
-                if "json" in content_lower:
-                    output_format_hint = "json"
-                elif "```" in content:
-                    output_format_hint = "code"
-                break
+                if output_format_hint is None:
+                    if "json" in content_lower:
+                        output_format_hint = "json"
+                    elif "```" in content:
+                        output_format_hint = "code"
+            elif role == "user" and isinstance(content, str):
+                user_kw_set.update(extract_keywords(content))
 
         # Trace context
         trace_ctx = extract_trace_context(kwargs)
@@ -325,6 +332,7 @@ class AgentProofCallback(CustomLogger):
                 token_ratio=token_ratio,
                 model=kwargs.get("model", "unknown"),
                 system_prompt_keywords=system_prompt_keywords,
+                user_prompt_keywords=list(user_kw_set),
                 output_format_hint=output_format_hint,
             )
             result = classify(classifier_input)

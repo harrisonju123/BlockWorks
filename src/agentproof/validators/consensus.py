@@ -4,14 +4,22 @@ Implements a threshold-based agreement protocol: when enough validators
 submit quality scores within a configurable tolerance of each other,
 consensus is reached and the agreed score is the median of the agreeing
 submissions. Outlier validators are flagged for slashing.
+
+StakeWeightedConsensusEngine extends the base engine with stake-weighted
+supermajority (2/3 of participating stake must vote yes) on top of the
+existing count-based quorum.
 """
 
 from __future__ import annotations
 
 import logging
 from statistics import median
+from typing import TYPE_CHECKING
 
 from agentproof.validators.types import ConsensusResult, ValidationSubmission
+
+if TYPE_CHECKING:
+    from agentproof.validators.registry import ValidatorRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -145,3 +153,99 @@ class ConsensusEngine:
     def get_submissions(self, task_id: str) -> list[ValidationSubmission]:
         """Return all submissions for a task."""
         return list(self._submissions.get(task_id, []))
+
+
+# ── Stake-weighted consensus ──────────────────────────────────────────
+
+
+SUPERMAJORITY_RATIO = 2 / 3
+
+
+class StakeWeightedConsensusEngine(ConsensusEngine):
+    """Extends ConsensusEngine with stake-weighted supermajority voting.
+
+    Consensus requires BOTH:
+      1. Score agreement: enough validators agree within tolerance (inherited)
+      2. Stake supermajority: yes_stake / total_participating_stake >= 2/3
+         AND voter count >= min_quorum
+    """
+
+    def __init__(
+        self,
+        registry: ValidatorRegistry,
+        *,
+        threshold: int = 2,
+        tolerance: float = 0.1,
+        slash_tolerance: float = 0.2,
+        min_quorum: int = 3,
+    ) -> None:
+        super().__init__(
+            threshold=threshold,
+            tolerance=tolerance,
+            slash_tolerance=slash_tolerance,
+        )
+        self._registry = registry
+        self._min_quorum = min_quorum
+
+    @property
+    def min_quorum(self) -> int:
+        return self._min_quorum
+
+    def check_consensus(self, task_id: str) -> ConsensusResult:
+        """Stake-weighted consensus check.
+
+        1. Run the base score-agreement check (median + tolerance).
+        2. Weight each agreeing validator's vote by their current stake.
+        3. Require yes_stake / total_stake >= 2/3 AND count >= min_quorum.
+        """
+        # Get the base result (score agreement via median/tolerance)
+        result = super().check_consensus(task_id)
+
+        subs = self._submissions.get(task_id, [])
+        if not subs:
+            return result
+
+        # Single pass: compute total stake and (if score agreement passed)
+        # yes stake from agreeing validators. Avoids double registry lookups.
+        agreed = result.agreed_score
+        agreeing_addrs = (
+            {
+                sub.validator_address
+                for sub in subs
+                if abs(sub.quality_score - agreed) <= self._tolerance
+            }
+            if result.consensus_reached and agreed is not None
+            else set()
+        )
+
+        total_stake = 0.0
+        yes_stake = 0.0
+        for sub in subs:
+            info = self._registry.get_validator(sub.validator_address)
+            stake = info.stake_amount if info else 0.0
+            total_stake += stake
+            if sub.validator_address in agreeing_addrs:
+                yes_stake += stake
+
+        result.total_participating_stake = total_stake
+
+        if not result.consensus_reached:
+            return result
+
+        result.yes_stake = yes_stake
+
+        # Check supermajority AND quorum
+        has_supermajority = (
+            total_stake > 0
+            and (yes_stake / total_stake) >= SUPERMAJORITY_RATIO
+        )
+        has_quorum = len(agreeing_addrs) >= self._min_quorum
+
+        result.supermajority_reached = has_supermajority
+
+        # Override consensus_reached: must satisfy BOTH score agreement
+        # AND stake supermajority AND quorum
+        if not (has_supermajority and has_quorum):
+            result.consensus_reached = False
+
+        return result

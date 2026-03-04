@@ -2,8 +2,9 @@ import { useMemo, useState } from "react";
 import { useTopTraces } from "../hooks/useStats";
 import type { TimeRange } from "../hooks/useStats";
 import { modelColor } from "./charts/modelColors";
-import { formatMs } from "../utils/format";
+import { formatMs, formatUSD } from "../utils/format";
 import { CardShell } from "./common/CardShell";
+import { InfoTip } from "./common/InfoTip";
 
 interface Props {
   timeRange: TimeRange;
@@ -73,7 +74,7 @@ export function TopTracesTable({ timeRange }: Props) {
 
   return (
     <CardShell
-      title="Top 10 traces by cost"
+      title={<span className="flex items-center gap-1">Top 10 traces by cost <InfoTip text="A trace groups all LLM calls in a single agent session. Shows the most expensive traces to spot runaway loops." /></span>}
       loading={isLoading}
       error={error}
       skeletonHeight="h-40"
@@ -130,7 +131,7 @@ export function TopTracesTable({ timeRange }: Props) {
                     {truncateId(trace.trace_id)}
                   </td>
                   <td className="py-1.5 pr-4 font-mono text-right text-violet-300">
-                    ${trace.total_cost_usd.toFixed(4)}
+                    {formatUSD(trace.total_cost_usd)}
                   </td>
                   <td className="py-1.5 pr-4 font-mono text-right text-gray-300">
                     {trace.total_tokens.toLocaleString()}

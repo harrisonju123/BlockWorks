@@ -1,5 +1,7 @@
 import { useSummary, usePreviousSummary } from "../hooks/useStats";
 import type { TimeRange } from "../hooks/useStats";
+import { formatUSD } from "../utils/format";
+import { InfoTip } from "./common/InfoTip";
 
 interface Props {
   timeRange: TimeRange;
@@ -16,6 +18,7 @@ interface StatCardProps {
   upIsGood?: boolean;
   /** Conditional threshold coloring */
   valueClassName?: string;
+  tip?: string;
 }
 
 function formatDelta(delta: number): string {
@@ -36,7 +39,7 @@ const SENTIMENT_COLORS: Record<Sentiment, string> = {
   neutral: "text-gray-500",
 };
 
-function StatCard({ label, value, loading, delta, upIsGood = true, valueClassName }: StatCardProps) {
+function StatCard({ label, value, loading, delta, upIsGood = true, valueClassName, tip }: StatCardProps) {
   const sentiment = delta != null ? deltaSentiment(delta, upIsGood) : "neutral";
   const arrow = delta != null && Math.abs(delta) >= 0.5
     ? (delta > 0 ? "▲" : "▼")
@@ -58,7 +61,7 @@ function StatCard({ label, value, loading, delta, upIsGood = true, valueClassNam
           )}
         </div>
       )}
-      <span className="text-xs uppercase tracking-wider text-gray-500">{label}</span>
+      <span className="text-xs uppercase tracking-wider text-gray-500 flex items-center gap-1">{label} <InfoTip text={tip} /></span>
     </div>
   );
 }
@@ -116,7 +119,7 @@ export function StatsBar({ timeRange }: Props) {
     },
     {
       label: "Total cost",
-      value: isLoading ? "–" : `$${(data?.total_cost_usd ?? 0).toFixed(4)}`,
+      value: isLoading ? "–" : formatUSD(data?.total_cost_usd ?? 0),
       delta: pctChange(data?.total_cost_usd ?? 0, prevData?.total_cost_usd ?? 0),
       upIsGood: false,
     },
@@ -126,6 +129,7 @@ export function StatsBar({ timeRange }: Props) {
       delta: pctChange(avgLatency, prevAvgLatency),
       upIsGood: false,
       valueClassName: valueColor("latency", avgLatency),
+      tip: "Request-weighted mean latency across all models. High values may indicate throttling or oversized prompts.",
     },
     {
       label: "Failure rate",
@@ -135,6 +139,7 @@ export function StatsBar({ timeRange }: Props) {
       delta: pctChange(data?.failure_rate ?? 0, prevData?.failure_rate ?? 0),
       upIsGood: false,
       valueClassName: valueColor("failure", data?.failure_rate ?? 0),
+      tip: "Percentage of LLM calls that returned an error or timed out.",
     },
   ];
 
@@ -149,6 +154,7 @@ export function StatsBar({ timeRange }: Props) {
           delta={c.delta}
           upIsGood={c.upIsGood}
           valueClassName={c.valueClassName}
+          tip={c.tip}
         />
       ))}
     </div>

@@ -17,6 +17,7 @@ import logging
 import time
 import uuid
 from datetime import datetime
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -39,7 +40,7 @@ from agentproof.routing.router import FitnessCache, resolve
 from agentproof.routing.types import RoutingDecision
 from agentproof.routing.writer import DecisionRecord
 from agentproof.types import EventStatus, LLMEvent, TaskType, ToolCallRecord
-from agentproof.utils import utcnow
+from agentproof.utils import infer_provider, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -97,12 +98,7 @@ def _detect_framework_from_headers(headers: httpx.Headers | dict) -> str | None:
 
 
 def _infer_provider(model: str) -> str:
-    name = model.lower()
-    if "claude" in name:
-        return "anthropic"
-    if any(tag in name for tag in ("gpt", "o1", "o3")):
-        return "openai"
-    return "unknown"
+    return infer_provider(model)
 
 
 def _build_upstream_headers(request_headers: dict) -> dict[str, str]:
@@ -138,21 +134,33 @@ def _enqueue(
                     logger.warning("Benchmark queue full — skipping event %s", event.id)
 
 
-def _maybe_route(request: Request, body: dict, model: str) -> tuple[str, RoutingDecision | None]:
-    """Pre-classify and resolve routing if enabled. Returns (model, decision)."""
+def _maybe_route(
+    request: Request, body: dict, model: str, classify_fn: Callable[..., tuple[TaskType | None, float | None, str | None]],
+) -> tuple[str, RoutingDecision | None, tuple[TaskType | None, float | None, str | None]]:
+    """Pre-classify and resolve routing if enabled.
+
+    Returns (model, decision, (task_type, confidence, sys_hash)).
+    The classification result is returned so callers can reuse it
+    instead of re-running the classifier after the upstream response.
+    """
+    # X-Force-Model header bypasses routing entirely
+    forced = request.headers.get("x-force-model")
+    if forced:
+        return forced, None, (None, None, None)
+
     routing_enabled: bool = getattr(request.app.state, "routing_enabled", False)
     if not routing_enabled:
-        return model, None
+        return model, None, (None, None, None)
 
     fitness_cache: FitnessCache | None = getattr(request.app.state, "fitness_cache", None)
     policy = getattr(request.app.state, "routing_policy", None)
     if fitness_cache is None or policy is None:
-        return model, None
+        return model, None, (None, None, None)
 
     # Pre-classify to get task_type (token counts unknown yet, pass 0)
-    task_type, _, _ = _classify_request(body, 0, 0)
+    task_type, confidence, sys_hash = classify_fn(body, 0, 0)
     if task_type is None:
-        return model, None
+        return model, None, (task_type, confidence, sys_hash)
 
     decision = resolve(
         task_type=task_type,
@@ -182,9 +190,9 @@ def _maybe_route(request: Request, body: dict, model: str) -> tuple[str, Routing
             logger.warning("Decision queue full — dropping routing decision")
 
     if decision.was_overridden:
-        return decision.selected_model, decision
+        return decision.selected_model, decision, (task_type, confidence, sys_hash)
 
-    return model, decision
+    return model, decision, (task_type, confidence, sys_hash)
 
 
 def _classify_request(
@@ -204,19 +212,27 @@ def _classify_request(
     has_json_schema = False
     output_format_hint: str | None = None
 
+    user_kw_set: set[str] = set()
+
     for msg in messages:
-        if isinstance(msg, dict) and msg.get("role") == "system":
-            content = msg.get("content", "")
-            system_prompt_hash = hash_content(content)
-            system_prompt_keywords = extract_keywords(content)
-            has_code_fence = "```" in content
-            has_json_schema = '"type"' in content and '"properties"' in content
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role")
+        content = msg.get("content", "")
+        if role == "system":
+            if system_prompt_hash is None:
+                system_prompt_hash = hash_content(content)
+            system_prompt_keywords.extend(extract_keywords(content))
+            has_code_fence = has_code_fence or "```" in content
+            has_json_schema = has_json_schema or ('"type"' in content and '"properties"' in content)
             content_lower = content.lower()
-            if "json" in content_lower:
-                output_format_hint = "json"
-            elif "```" in content:
-                output_format_hint = "code"
-            break
+            if output_format_hint is None:
+                if "json" in content_lower:
+                    output_format_hint = "json"
+                elif "```" in content:
+                    output_format_hint = "code"
+        elif role == "user" and isinstance(content, str):
+            user_kw_set.update(extract_keywords(content))
 
     tools = body.get("tools") or body.get("functions") or []
     token_ratio = compute_token_ratio(prompt_tokens, completion_tokens)
@@ -232,10 +248,69 @@ def _classify_request(
         token_ratio=token_ratio,
         model=body.get("model", "unknown"),
         system_prompt_keywords=system_prompt_keywords,
+        user_prompt_keywords=list(user_kw_set),
         output_format_hint=output_format_hint,
     )
     result = classify(inp)
     return result.task_type, result.confidence, system_prompt_hash
+
+
+def _build_event(
+    *,
+    started_at: datetime,
+    model: str,
+    provider: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    latency_ms: float,
+    body: dict,
+    completion_content: str,
+    sys_hash: str | None,
+    trace_id: str,
+    framework: str | None,
+    tool_calls: list[ToolCallRecord],
+    task_type: TaskType | None,
+    task_confidence: float | None,
+    response_id: str | None,
+    error_type: str | None,
+    error_hash: str | None,
+    ttft_ms: float | None = None,
+    cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
+) -> LLMEvent:
+    """Single construction site for LLMEvent — avoids 4x copy-paste."""
+    return LLMEvent(
+        id=uuid.uuid4(),
+        created_at=started_at,
+        status=EventStatus.FAILURE if error_type else EventStatus.SUCCESS,
+        provider=provider,
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens,
+        estimated_cost=_compute_cost(
+            model, prompt_tokens, completion_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+        ),
+        cache_read_tokens=cache_read_tokens,
+        cache_creation_tokens=cache_creation_tokens,
+        latency_ms=latency_ms,
+        time_to_first_token_ms=ttft_ms,
+        prompt_hash=hash_content(body.get("messages", [])),
+        completion_hash=hash_content(completion_content),
+        system_prompt_hash=sys_hash,
+        trace_id=trace_id,
+        span_id=uuid.uuid4().hex,
+        agent_framework=framework,
+        tool_calls=tool_calls,
+        has_tool_calls=len(tool_calls) > 0,
+        task_type=task_type,
+        task_type_confidence=task_confidence,
+        litellm_call_id=response_id or uuid.uuid4().hex,
+        error_type=error_type,
+        error_message_hash=error_hash,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +515,7 @@ async def proxy_chat_completions(request: Request) -> JSONResponse | StreamingRe
     model = body.get("model", "unknown")
 
     # Routing: potentially override the model before forwarding
-    routed_model, _ = _maybe_route(request, body, model)
+    routed_model, _, _ = _maybe_route(request, body, model, _classify_request)
     if routed_model != model:
         body["model"] = routed_model
         model = routed_model
@@ -478,6 +553,7 @@ async def _handle_non_streaming(
     try:
         data = resp.json()
     except Exception:
+        logger.warning("Failed to parse JSON from OpenAI upstream (status=%d)", status_code)
         data = {}
 
     event_status = EventStatus.SUCCESS if 200 <= status_code < 300 else EventStatus.FAILURE
@@ -686,10 +762,13 @@ async def proxy_messages(request: Request) -> JSONResponse | StreamingResponse:
     query_string = str(request.url.query)
 
     # Routing: potentially override the model before forwarding
-    routed_model, _ = _maybe_route(request, body, model)
+    routed_model, _, _ = _maybe_route(request, body, model, _classify_anthropic_request)
     if routed_model != model:
         body["model"] = routed_model
         model = routed_model
+        # Downgraded models may not support extended/adaptive thinking —
+        # strip it to avoid 400 errors from the upstream API.
+        body.pop("thinking", None)
 
     if body.get("stream", False):
         return await _handle_messages_streaming(
@@ -722,6 +801,7 @@ async def _handle_messages_non_streaming(
     try:
         data = resp.json()
     except Exception:
+        logger.warning("Failed to parse JSON from Anthropic upstream (status=%d)", status_code)
         data = {}
 
     event_status = EventStatus.SUCCESS if 200 <= status_code < 300 else EventStatus.FAILURE

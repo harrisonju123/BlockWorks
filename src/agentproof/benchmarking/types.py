@@ -45,7 +45,7 @@ class BenchmarkResult(BaseModel):
     benchmark_cost: float
     original_latency_ms: float
     benchmark_latency_ms: float
-    judge_model: str = "claude-haiku-4-5-20251001"
+    judge_model: str = "claude-sonnet-4-6"
     rubric_version: str
     org_id: str | None = None
 
@@ -60,7 +60,7 @@ class BenchmarkConfig(BaseModel):
     enabled_task_types: list[TaskType] = Field(
         default_factory=lambda: list(TaskType)
     )
-    judge_model: str = "claude-haiku-4-5-20251001"
+    judge_model: str = "claude-sonnet-4-6"
 
 
 class FitnessEntry(BaseModel):

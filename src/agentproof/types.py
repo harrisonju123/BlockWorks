@@ -27,6 +27,7 @@ class TaskType(str, enum.Enum):
     """
 
     CODE_GENERATION = "code_generation"
+    CODE_REVIEW = "code_review"
     CLASSIFICATION = "classification"
     SUMMARIZATION = "summarization"
     EXTRACTION = "extraction"

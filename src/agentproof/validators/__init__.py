@@ -1,7 +1,11 @@
 """Decentralized benchmark validators package."""
 
 from agentproof.validators.types import (
+    AttestationChallenge,
+    ChallengeStatus,
+    ConsensusProposal,
     ConsensusResult,
+    ProposalStatus,
     ValidationSubmission,
     ValidationTask,
     ValidatorInfo,
@@ -9,7 +13,11 @@ from agentproof.validators.types import (
 )
 
 __all__ = [
+    "AttestationChallenge",
+    "ChallengeStatus",
+    "ConsensusProposal",
     "ConsensusResult",
+    "ProposalStatus",
     "ValidationSubmission",
     "ValidationTask",
     "ValidatorInfo",

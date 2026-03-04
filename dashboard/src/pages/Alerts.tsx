@@ -8,6 +8,7 @@ import {
   useCreateBudget,
 } from "../hooks/useAlerts";
 import { CardShell } from "../components/common/CardShell";
+import { InfoTip } from "../components/common/InfoTip";
 import { formatUSD } from "../utils/format";
 import type {
   AlertRuleCreate,
@@ -29,13 +30,13 @@ export function Alerts() {
 
   return (
     <div className="flex flex-col gap-6 max-w-[1600px] mx-auto">
-      <h1 className="text-lg font-semibold">Alerts & Budgets</h1>
+      <h1 className="text-lg font-semibold flex items-center gap-2">Alerts & Budgets <InfoTip text="Configure spend thresholds, anomaly detection, and budget caps. Alerts fire to Slack or email when conditions are met." /></h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Alert Rules */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-gray-300">Alert Rules</h2>
+            <h2 className="text-sm font-medium text-gray-300 flex items-center gap-1">Alert Rules <InfoTip text="Rules evaluate periodically against recent metrics. Types: spend_threshold, anomaly_zscore, error_rate, latency_p95." /></h2>
             <button
               onClick={() => setShowRuleForm((v) => !v)}
               className="px-2.5 py-1 text-xs bg-violet-600/20 text-violet-300 rounded hover:bg-violet-600/30 transition-colors"
@@ -50,7 +51,7 @@ export function Alerts() {
         {/* Budgets */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-gray-300">Budgets</h2>
+            <h2 className="text-sm font-medium text-gray-300 flex items-center gap-1">Budgets <InfoTip text="Spending caps with automatic enforcement. Actions: alert (notify only), downgrade (switch to cheaper models), block (reject requests)." /></h2>
             <button
               onClick={() => setShowBudgetForm((v) => !v)}
               className="px-2.5 py-1 text-xs bg-violet-600/20 text-violet-300 rounded hover:bg-violet-600/30 transition-colors"

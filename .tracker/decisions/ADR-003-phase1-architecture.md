@@ -515,11 +515,11 @@ The `AlertRule.threshold` field is a dict whose shape depends on `rule_type`. Va
 
 ## 5. Key Technical Decisions
 
-### 5a. LLM-as-Judge: Haiku for Scoring
+### 5a. LLM-as-Judge: Sonnet for Scoring
 
-**Decision:** Use `claude-haiku-4-5-20251001` as the judge model for all benchmark evaluations.
+**Decision:** Use `claude-sonnet-4-6` as the judge model for all benchmark evaluations.
 
-**Why Haiku:** At $0.80/$4.00 per 1M tokens, Haiku is 19x cheaper than Opus for input and keeps benchmarking costs proportional to value. Research (Zheng et al., "Judging LLM-as-a-Judge") shows smaller models achieve >85% agreement with human raters on structured rubrics. If agreement drops below 80% on our rubrics, we escalate that specific task type to Sonnet.
+**Why Sonnet:** Upgraded from Haiku (`claude-haiku-4-5-20251001`) to improve evaluation quality on nuanced tasks like code review and reasoning. Judge responses are capped at 256 tokens, so the per-call cost increase is modest. Sonnet provides significantly better agreement with human raters on structured rubrics, especially for multi-criterion evaluations where Haiku showed weakness.
 
 **Rubric format:** One rubric per `TaskType`. Each rubric returns a structured JSON score.
 

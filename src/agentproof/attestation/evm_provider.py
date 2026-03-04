@@ -180,6 +180,8 @@ class EVMProvider(AttestationProvider):
         self._account = None
         self._init_lock = asyncio.Lock()
         self._tx_lock = asyncio.Lock()
+        # Track org hashes seen via submit/query (contract has no enumeration)
+        self._known_orgs: set[str] = set()
 
     async def _ensure_connected(self) -> None:
         """Lazy-initialize the web3 connection and contract instance."""
@@ -253,7 +255,9 @@ class EVMProvider(AttestationProvider):
         self._require_connected()
 
         fn = self._contract.functions.attest(*_record_to_contract_tuple(record))
-        return await self._send_tx(fn)
+        tx_hash = await self._send_tx(fn)
+        self._known_orgs.add(record.org_id_hash)
+        return tx_hash
 
     async def batch_submit(self, records: list[AttestationRecord]) -> list[str]:
         if not records:
@@ -314,7 +318,10 @@ class EVMProvider(AttestationProvider):
 
         org_bytes = _hex_to_bytes32(org_id_hash)
         result = await self._contract.functions.getLatest(org_bytes).call()
-        return _tuple_to_record(result)
+        record = _tuple_to_record(result)
+        if record is not None:
+            self._known_orgs.add(org_id_hash)
+        return record
 
     async def get_latest_nonce(self, org_id_hash: str) -> int:
         await self._ensure_connected()
@@ -324,5 +331,4 @@ class EVMProvider(AttestationProvider):
         return await self._contract.functions.latestNonce(org_bytes).call()
 
     async def get_org_hashes(self) -> list[str]:
-        # EVM contract doesn't expose an org enumeration function yet
-        return []
+        return sorted(self._known_orgs)

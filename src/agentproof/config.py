@@ -43,13 +43,26 @@ class AgentProofConfig(BaseSettings):
     # Benchmarking
     benchmark_enabled: bool = False
     benchmark_sample_rate: float = 0.05
-    benchmark_models: list[str] = ["claude-haiku-4-5-20251001", "gpt-4o-mini"]
-    benchmark_judge_model: str = "claude-haiku-4-5-20251001"
+    benchmark_models: list[str] = [
+        "claude-haiku-4-5-20251001",
+        "gpt-4o-mini",
+        "google.gemma-3-27b-it",
+        "openai.gpt-oss-120b-1:0",
+    ]
+    benchmark_judge_model: str = "claude-sonnet-4-6"
 
     # Routing
-    routing_enabled: bool = False
+    routing_enabled: bool = True
     routing_policy_path: str | None = None
     routing_fitness_cache_ttl_s: int = 300
+    # Models available in the upstream provider (e.g. LiteLLM).
+    # The router will only select from this set. Empty = allow all catalog models.
+    routing_available_models: list[str] = []
+    # User-selected models per tier. Synthetic fitness is generated for only
+    # these 3 models. Task complexity determines which tier is used.
+    routing_model_high: str = "claude-opus-4-6"
+    routing_model_mid: str = "claude-sonnet-4-6"
+    routing_model_low: str = "claude-haiku-4-5-20251001"
 
     # Alerts & Budgets
     alerts_enabled: bool = True

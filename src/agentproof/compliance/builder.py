@@ -48,7 +48,7 @@ def classify_risk(
         return RiskLevel.CRITICAL
 
     # HIGH: autonomous code execution, or any sensitive + tool usage
-    if tt == TaskType.CODE_GENERATION.value and has_tool_calls:
+    if tt in (TaskType.CODE_GENERATION.value, TaskType.CODE_REVIEW.value) and has_tool_calls:
         return RiskLevel.HIGH
     if has_sensitive and has_tool_calls:
         return RiskLevel.HIGH

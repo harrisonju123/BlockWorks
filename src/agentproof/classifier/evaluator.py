@@ -115,12 +115,14 @@ def load_dataset(path: Path | None = None) -> list[EvalExample]:
             row = json.loads(line)
 
             system_prompt = row["system_prompt"]
+            user_prompt = row.get("user_prompt", "")
             prompt_tokens = row["prompt_tokens"]
             completion_tokens = row["completion_tokens"]
 
             token_ratio = compute_token_ratio(prompt_tokens, completion_tokens)
 
             keywords = _extract_keywords(system_prompt)
+            user_keywords = extract_keywords(user_prompt) if user_prompt else []
 
             ci = ClassifierInput(
                 system_prompt_hash=str(hash(system_prompt)),
@@ -133,6 +135,7 @@ def load_dataset(path: Path | None = None) -> list[EvalExample]:
                 token_ratio=token_ratio,
                 model=row["model"],
                 system_prompt_keywords=keywords,
+                user_prompt_keywords=user_keywords,
                 output_format_hint=row.get("output_format_hint"),
             )
 

@@ -1,4 +1,4 @@
-.PHONY: dev dev-proxy down reset logs db-shell test test-unit test-integration lint fmt typecheck ci install claude claude-proxy forge-test deploy-local
+.PHONY: dev dev-proxy down reset logs db-shell test test-unit test-integration lint fmt typecheck ci install claude claude-proxy forge-test deploy-local seed demo demo-traffic demo-check demo-reset
 
 # Start full stack (DB + API + Dashboard)
 dev:
@@ -62,6 +62,10 @@ claude:
 claude-proxy:
 	ANTHROPIC_BASE_URL=http://localhost:8100 claude
 
+# Force a specific model, bypassing routing: make force-model MODEL=claude-opus-4-6
+force-model:
+	ANTHROPIC_BASE_URL=http://localhost:8100 ANTHROPIC_EXTRA_HEADERS='{"x-force-model":"$(MODEL)"}' claude
+
 # Run Foundry contract tests
 forge-test:
 	cd contracts && forge test -v
@@ -69,6 +73,63 @@ forge-test:
 # Deploy contracts to local Anvil
 deploy-local:
 	cd contracts && DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast
+
+# Seed demo data into a running stack
+seed:
+	docker compose exec -T api python /app/scripts/seed_demo.py
+
+# Pre-flight check: Docker installed and running
+demo-check:
+	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker not found. Install Docker Desktop first."; exit 1; }
+	@docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon not running. Start Docker Desktop first."; exit 1; }
+	@command -v curl >/dev/null 2>&1 || { echo "ERROR: curl not found."; exit 1; }
+	@echo "Pre-flight OK"
+
+# Clean slate: tear down everything including volumes
+demo-reset:
+	docker compose down -v
+	@echo "Volumes removed. Run 'make demo' to start fresh."
+
+# One-command demo: build, start, wait, seed
+demo: demo-check
+	docker compose up -d --build
+	@echo "Waiting for DB (up to 60s)..."
+	@for i in $$(seq 1 60); do \
+		docker compose exec -T db pg_isready -U agentproof > /dev/null 2>&1 && break; \
+		[ $$i -eq 60 ] && echo "ERROR: DB did not become ready" && exit 1; \
+		sleep 1; \
+	done
+	@echo "Waiting for API (up to 60s)..."
+	@for i in $$(seq 1 60); do \
+		curl -sf http://localhost:8100/health > /dev/null 2>&1 && break; \
+		[ $$i -eq 60 ] && echo "ERROR: API did not become ready" && exit 1; \
+		sleep 1; \
+	done
+	@echo "Seeding demo data..."
+	docker compose exec -T api python /app/scripts/seed_demo.py
+	@echo "Waiting for Dashboard (up to 90s)..."
+	@for i in $$(seq 1 90); do \
+		curl -sf http://localhost:8081 > /dev/null 2>&1 && break; \
+		[ $$i -eq 90 ] && echo "ERROR: Dashboard did not become ready" && exit 1; \
+		sleep 1; \
+	done
+	@echo ""
+	@echo "╔══════════════════════════════════════════╗"
+	@echo "║            Demo Ready                    ║"
+	@echo "╠══════════════════════════════════════════╣"
+	@echo "║  Dashboard:  http://localhost:8081       ║"
+	@echo "║  API:        http://localhost:8100       ║"
+	@echo "╠══════════════════════════════════════════╣"
+	@echo "║  Next steps:                             ║"
+	@echo "║    make demo-traffic  (live requests)    ║"
+	@echo "║    make demo-reset    (clean slate)      ║"
+	@echo "║                                          ║"
+	@echo "║  Talk track: docs/DEMO_GUIDE.md          ║"
+	@echo "╚══════════════════════════════════════════╝"
+
+# Send live demo traffic through the proxy (requires ANTHROPIC_API_KEY)
+demo-traffic:
+	python scripts/demo_traffic.py
 
 # Install dev dependencies
 install:

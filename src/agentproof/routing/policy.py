@@ -13,7 +13,7 @@ from typing import Any
 import yaml
 
 from agentproof.models import MODEL_CATALOG
-from agentproof.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
+from agentproof.routing.types import QUALITY_FLOOR, RoutingPolicy, RoutingRule, SelectionCriteria
 from agentproof.types import TaskType
 
 # All task_type values the router recognizes, plus the wildcard
@@ -111,10 +111,95 @@ def validate_policy(policy: RoutingPolicy) -> None:
         raise PolicyValidationError(errors)
 
 
-def default_policy() -> RoutingPolicy:
-    """Built-in passthrough policy that returns the originally requested model.
+# Complex task types that get higher quality thresholds and mid-tier fallbacks
+_COMPLEX_TASKS: set[TaskType] = {
+    TaskType.CODE_GENERATION, TaskType.CODE_REVIEW,
+    TaskType.SUMMARIZATION, TaskType.REASONING,
+}
 
-    An empty rule list means resolve() will always return the requested model
-    unchanged -- no routing decisions are made.
+
+def _compute_task_threshold(entries: list[Any]) -> float:
+    """Derive min_quality from actual benchmark data for a task type.
+
+    Uses upper-median quality of benchmarked models so at least ceil(N/2)
+    models qualify. Clamps between QUALITY_FLOOR (0.7) and 0.95.
     """
-    return RoutingPolicy(rules=[], version=0)
+    real = [e for e in entries if e.sample_size > 0]
+    if not real:
+        return 0.8
+    qualities = sorted(e.avg_quality for e in real)
+    # Upper-median: ensures at least half the models meet the threshold
+    median_q = qualities[len(qualities) // 2]
+    return max(QUALITY_FLOOR, min(0.95, round(median_q, 3)))
+
+
+# Cache keyed by config tuple + fitness cache timestamp for self-invalidation.
+_cached_bootstrap: dict[tuple[str, str, str, float], RoutingPolicy] = {}
+
+
+def clear_bootstrap_cache() -> None:
+    """Invalidate the cached bootstrap policy. Call when tier config changes."""
+    _cached_bootstrap.clear()
+
+
+def bootstrap_policy(fitness_cache: Any = None) -> RoutingPolicy:
+    """Config-driven default policy using the 3 user-selected tier models.
+
+    When fitness_cache has real benchmark data, uses BEST_VALUE criteria with
+    data-derived quality thresholds. Otherwise falls back to static
+    CHEAPEST_ABOVE_QUALITY with hardcoded thresholds.
+
+    Version=0 signals system-generated.
+    Cached per (config tuple, fitness timestamp) — stale entries auto-evict.
+    """
+    from agentproof.config import get_config
+    cfg = get_config()
+    has_fitness = fitness_cache is not None and not fitness_cache.is_empty
+    # Use _last_updated timestamp so different fitness data produces different keys
+    fitness_ts = getattr(fitness_cache, "_last_updated", 0.0) if has_fitness else 0.0
+
+    cache_key = (cfg.routing_model_high, cfg.routing_model_mid, cfg.routing_model_low, fitness_ts)
+    if cache_key in _cached_bootstrap:
+        return _cached_bootstrap[cache_key]
+
+    rules: list[RoutingRule] = []
+    task_types = [t for t in TaskType if t != TaskType.UNKNOWN]
+
+    for task in task_types:
+        if has_fitness:
+            entries = fitness_cache.get_entries_for_task(task.value)
+            min_q = _compute_task_threshold(entries)
+            criteria = SelectionCriteria.BEST_VALUE
+        else:
+            min_q = 0.85 if task in _COMPLEX_TASKS else 0.8
+            criteria = SelectionCriteria.CHEAPEST_ABOVE_QUALITY
+
+        fallback = cfg.routing_model_mid if task in _COMPLEX_TASKS else cfg.routing_model_low
+        rules.append(RoutingRule(
+            task_type=task.value,
+            criteria=criteria,
+            min_quality=min_q,
+            fallback=fallback,
+        ))
+
+    # Catch-all
+    rules.append(RoutingRule(
+        task_type="*",
+        criteria=SelectionCriteria.BEST_VALUE if has_fitness else SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+        min_quality=0.75,
+        fallback=cfg.routing_model_mid,
+    ))
+
+    policy = RoutingPolicy(rules=rules, version=0)
+    validate_policy(policy)
+    _cached_bootstrap[cache_key] = policy
+    return policy
+
+
+def default_policy(fitness_cache: Any = None) -> RoutingPolicy:
+    """Built-in policy used when no DB or YAML policy is configured.
+
+    Returns the bootstrap policy with conservative routing rules
+    instead of an empty passthrough.
+    """
+    return bootstrap_policy(fitness_cache=fitness_cache)

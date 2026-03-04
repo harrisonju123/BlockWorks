@@ -91,11 +91,11 @@ class ValidatorEconomics:
         agreed = result.agreed_score
         agreeing = [
             s.validator_address for s in result.submissions
-            if abs(s.quality_score - agreed) <= self._consensus._tolerance
+            if abs(s.quality_score - agreed) <= self._consensus.tolerance
         ]
         outliers = [
             s.validator_address for s in result.submissions
-            if abs(s.quality_score - agreed) > self._consensus._slash_tolerance
+            if abs(s.quality_score - agreed) > self._consensus.slash_tolerance
         ]
 
         settlements: dict[str, float] = {}
@@ -124,5 +124,58 @@ class ValidatorEconomics:
                     "Slashed validator %s by %.6f for task %s",
                     address, slash_amount, task_id,
                 )
+
+        return settlements
+
+    def settle_challenge(
+        self,
+        challenge_id: str,
+        yes_voters: list[str],
+        challenger_address: str,
+        bond: float,
+        challenger_wins: bool,
+    ) -> dict[str, float]:
+        """Settle a disputed attestation challenge.
+
+        If challenger wins: slash all yes-voters (slash_percentage of their
+        stake), return bond + 50% of total slashed amount to challenger.
+        If challenger loses: bond is forfeited (no refund).
+
+        Returns address -> net change mapping.
+        """
+        settlements: dict[str, float] = {}
+
+        if challenger_wins:
+            total_slashed = 0.0
+            for address in yes_voters:
+                info = self._registry.get_validator(address)
+                if info is None:
+                    continue
+                slash_amount = info.stake_amount * self._slash_percentage
+                if slash_amount > 0:
+                    self._registry.slash(
+                        address, slash_amount, f"Challenge {challenge_id} lost"
+                    )
+                    total_slashed += slash_amount
+                    settlements[address] = -slash_amount
+                    logger.warning(
+                        "Challenge slash: validator %s lost %.6f for challenge %s",
+                        address, slash_amount, challenge_id,
+                    )
+
+            # Challenger gets bond back + 50% of slash proceeds
+            reward = bond + (total_slashed / 2)
+            settlements[challenger_address] = reward
+            logger.info(
+                "Challenge %s: challenger %s wins, reward=%.6f (bond=%.6f + slash_share=%.6f)",
+                challenge_id, challenger_address, reward, bond, total_slashed / 2,
+            )
+        else:
+            # Challenger loses — bond forfeited
+            settlements[challenger_address] = -bond
+            logger.info(
+                "Challenge %s: challenger %s loses, bond %.6f forfeited",
+                challenge_id, challenger_address, bond,
+            )
 
         return settlements

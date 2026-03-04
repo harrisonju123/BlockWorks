@@ -228,8 +228,8 @@ export interface RoutingRule {
   task_type: string;
   criteria: string;
   min_quality: number;
-  max_cost_per_1k: number;
-  max_latency_ms: number;
+  max_cost_per_1k: number | null;
+  max_latency_ms: number | null;
   fallback: string;
 }
 
@@ -238,12 +238,18 @@ export interface RoutingPolicy {
   version: number;
 }
 
+export interface PolicyResponse {
+  policy: RoutingPolicy;
+  is_default: boolean;
+  routing_enabled: boolean;
+}
+
 export interface RoutingDecision {
   selected_model: string;
   reason: string;
   was_overridden: boolean;
-  policy_rule_id: string | null;
-  group: string;
+  policy_version: number | null;
+  group_name: string | null;
 }
 
 export interface DecisionsResponse {

@@ -17,6 +17,7 @@ def _make_input(**overrides) -> ClassifierInput:
         "token_ratio": 0.4,
         "model": "claude-sonnet-4-20250514",
         "system_prompt_keywords": [],
+        "user_prompt_keywords": [],
         "output_format_hint": None,
     }
     defaults.update(overrides)
@@ -96,3 +97,68 @@ class TestExtractKeywordsWordBoundary:
     def test_help_exact_word_matches(self):
         result = extract_keywords("I need help with this task")
         assert "help" in result
+
+
+class TestCodeReviewClassification:
+    """Verify CODE_REVIEW is correctly classified and beats CODE_GENERATION
+    when review keywords are present alongside code fences."""
+
+    def test_review_keywords_in_system_prompt(self):
+        """CODE_REVIEW keywords + code fence → CODE_REVIEW."""
+        inp = _make_input(
+            system_prompt_keywords=["code review", "code quality"],
+            has_code_fence_in_system=True,
+        )
+        result = classify(inp)
+        assert result.task_type == TaskType.CODE_REVIEW
+
+    def test_review_keywords_in_user_prompt(self):
+        """User prompt keywords alone drive CODE_REVIEW."""
+        inp = _make_input(
+            user_prompt_keywords=["review this code", "find bugs"],
+        )
+        result = classify(inp)
+        assert result.task_type == TaskType.CODE_REVIEW
+
+    def test_review_beats_codegen_with_code_fence(self):
+        """When review + codegen keywords coexist with user intent, CODE_REVIEW wins."""
+        inp = _make_input(
+            system_prompt_keywords=["code review", "function", "class"],
+            user_prompt_keywords=["review this code"],
+            has_code_fence_in_system=True,
+        )
+        result = classify(inp)
+        assert result.task_type == TaskType.CODE_REVIEW
+
+    def test_pure_codegen_unaffected(self):
+        """No review keywords → CODE_GENERATION unchanged."""
+        inp = _make_input(
+            system_prompt_keywords=["implement", "function"],
+            has_code_fence_in_system=True,
+        )
+        result = classify(inp)
+        assert result.task_type == TaskType.CODE_GENERATION
+
+    def test_audit_keyword(self):
+        """Single-word 'audit' triggers CODE_REVIEW."""
+        result = extract_keywords("please audit this module")
+        assert "audit" in result
+        inp = _make_input(system_prompt_keywords=["audit"])
+        result = classify(inp)
+        assert result.task_type == TaskType.CODE_REVIEW
+
+    def test_review_multiword_matches(self):
+        """Multi-word review phrases are extracted correctly."""
+        result = extract_keywords("please do a code review of this pull request")
+        assert "code review" in result
+        assert "pull request" in result
+
+    def test_output_hint_code_with_review_keywords(self):
+        """output_format_hint=code redirects to CODE_REVIEW when review keywords present."""
+        inp = _make_input(
+            system_prompt_keywords=["code review"],
+            output_format_hint="code",
+        )
+        result = classify(inp)
+        assert result.task_type == TaskType.CODE_REVIEW
+        assert "output_hint_code_as_review" in result.signals

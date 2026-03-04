@@ -12,6 +12,7 @@ export function formatTimestamp(iso: string, timeRange: TimeRange): string {
 }
 
 export function formatUSD(value: number): string {
+  if (value >= 1000) return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
   if (value >= 1) return `$${value.toFixed(2)}`;
   return `$${value.toFixed(4)}`;
 }

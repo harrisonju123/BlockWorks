@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import type { TimeRange } from "../hooks/useStats";
 import { useMCPServers, useMCPWaste } from "../hooks/useMCP";
 import { CardShell } from "../components/common/CardShell";
+import { InfoTip } from "../components/common/InfoTip";
 import { formatMs } from "../utils/format";
 import type { MCPServer } from "../api/types";
 
@@ -14,7 +15,7 @@ export function MCPTracing({ timeRange }: Props) {
 
   return (
     <div className="flex flex-col gap-6 max-w-[1600px] mx-auto">
-      <h1 className="text-lg font-semibold">MCP Tracing</h1>
+      <h1 className="text-lg font-semibold flex items-center gap-2">MCP Tracing <InfoTip text="Tracks Model Context Protocol tool calls made by AI agents — reliability, latency, and wasted data." /></h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
@@ -192,7 +193,7 @@ function WastePanel({ timeRange }: { timeRange: TimeRange }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-medium text-gray-300">Unused Data Waste</h2>
+      <h2 className="text-sm font-medium text-gray-300 flex items-center gap-1">Unused Data Waste <InfoTip text="MCP calls where the response was included in context but never referenced in the completion, inflating token costs." /></h2>
       <CardShell loading={isLoading} error={error ?? null} skeletonHeight="h-48">
         {data?.waste.length === 0 && (
           <p className="text-xs text-gray-500 py-4 text-center">

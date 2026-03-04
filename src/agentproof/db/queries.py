@@ -44,7 +44,7 @@ async def get_summary_stats(
     if group_by not in valid_groups:
         raise ValueError(f"group_by must be one of {valid_groups}")
 
-    use_aggregate = (end - start) >= timedelta(hours=24)
+    use_aggregate = (end - start) > timedelta(hours=24)
 
     org_filter = "AND org_id = :org_id" if org_id else ""
 
@@ -673,7 +673,7 @@ async def get_attestation_metrics(
     falls back to raw llm_events. The waste score comes from a separate
     subquery against the waste analysis path.
     """
-    use_aggregate = (end - start) >= timedelta(hours=24)
+    use_aggregate = (end - start) > timedelta(hours=24)
 
     if use_aggregate:
         query = text("""

@@ -1,4 +1,5 @@
 import { CardShell } from "../common/CardShell";
+import { InfoTip } from "../common/InfoTip";
 import { useWasteScore } from "../../hooks/useStats";
 import type { TimeRange } from "../../hooks/useStats";
 
@@ -74,7 +75,7 @@ export function WasteScore({ timeRange }: Props) {
 
   return (
     <CardShell
-      title="Waste score"
+      title={<span className="flex items-center gap-1">Waste score <InfoTip text="Estimated percentage of spend that could be saved by routing to cheaper models without meaningful quality loss." /></span>}
       loading={isLoading}
       error={error}
       skeletonHeight="h-32"

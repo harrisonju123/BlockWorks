@@ -33,4 +33,5 @@ class ClassifierInput(BaseModel):
     token_ratio: float
     model: str
     system_prompt_keywords: list[str]
+    user_prompt_keywords: list[str] = []
     output_format_hint: str | None

@@ -127,8 +127,8 @@ class TestABTestConfig:
         config = ABTestConfig()
         assert config.split_ratio == 0.5
         assert config.enabled is True
-        assert len(config.policy_a.rules) == 0
-        assert len(config.policy_b.rules) == 0
+        assert len(config.policy_a.rules) > 0  # bootstrap rules
+        assert len(config.policy_b.rules) > 0  # bootstrap rules
 
     def test_custom_split_ratio(self) -> None:
         config = ABTestConfig(split_ratio=0.2)

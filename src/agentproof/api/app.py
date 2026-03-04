@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
@@ -22,6 +23,7 @@ from agentproof.api.routes import (
     health,
     ingest,
     interop,
+    mcp,
     proxy,
     registry,
     revenue,
@@ -36,8 +38,8 @@ from agentproof.benchmarking.types import BenchmarkConfig
 from agentproof.config import get_config
 from agentproof.db.queries import get_active_routing_policy, get_fitness_matrix
 from agentproof.pipeline.writer import EventWriter
-from agentproof.routing.policy import default_policy
-from agentproof.routing.router import FitnessCache
+from agentproof.routing.policy import PolicyValidationError, default_policy, load_policy
+from agentproof.routing.router import FitnessCache, generate_synthetic_fitness, merge_fitness_entries
 from agentproof.routing.writer import DecisionRecord, RoutingDecisionWriter
 from agentproof.types import LLMEvent
 
@@ -45,16 +47,23 @@ logger = logging.getLogger(__name__)
 
 
 async def _refresh_fitness_cache(app: FastAPI, interval_s: int) -> None:
-    """Periodically refresh the FitnessCache from the DB."""
+    """Periodically refresh the FitnessCache by merging synthetic base + real DB entries."""
     while True:
         try:
             await asyncio.sleep(interval_s)
             from agentproof.api.deps import get_async_session
             async with get_async_session() as session:
-                entries = await get_fitness_matrix(session, org_id=None)
+                db_entries = await get_fitness_matrix(session, org_id=None)
+            synthetic = generate_synthetic_fitness()
+            merged = merge_fitness_entries(synthetic, db_entries)
             cache: FitnessCache = app.state.fitness_cache
-            cache.update(entries)
-            logger.debug("FitnessCache refreshed with %d entries", len(entries))
+            cache.update(merged)
+            # Regenerate bootstrap policy with fresh benchmark data;
+            # cache key includes fitness timestamp so no manual clear needed
+            policy = getattr(app.state, "routing_policy", None)
+            if policy is not None and policy.version == 0:
+                app.state.routing_policy = default_policy(fitness_cache=cache)
+            logger.debug("FitnessCache refreshed: %d merged entries", len(merged))
         except asyncio.CancelledError:
             break
         except Exception:
@@ -75,8 +84,10 @@ async def lifespan(app: FastAPI):
 
     # Separate client for Anthropic-native upstream (/v1/messages).
     _anthropic_default_headers = {}
-    if _api_key := os.environ.get("ANTHROPIC_API_KEY"):
+    _api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+    if _api_key:
         _anthropic_default_headers["x-api-key"] = _api_key
+        _anthropic_default_headers["Authorization"] = f"Bearer {_api_key}"
     anthropic_client = httpx.AsyncClient(
         base_url=cfg.anthropic_upstream_url,
         timeout=httpx.Timeout(300.0, connect=10.0),
@@ -103,22 +114,42 @@ async def lifespan(app: FastAPI):
     decision_writer_task = None
     if cfg.routing_enabled:
         app.state.fitness_cache = FitnessCache()
-        app.state.routing_policy = default_policy()
+        resolved_policy = None
 
-        # Eager DB load: policy + fitness cache in a single session
+        # Eager DB load: policy + fitness cache, merged with synthetic base
         try:
             from agentproof.api.deps import get_async_session
             from agentproof.api.routes.routing import _load_policy_from_row
             async with get_async_session() as session:
                 db_policy = await get_active_routing_policy(session)
-                entries = await get_fitness_matrix(session, org_id=None)
+                db_entries = await get_fitness_matrix(session, org_id=None)
             if db_policy is not None:
-                app.state.routing_policy = _load_policy_from_row(db_policy)
+                resolved_policy = _load_policy_from_row(db_policy)
                 logger.info("Loaded routing policy v%d from DB", db_policy["version"])
-            app.state.fitness_cache.update(entries)
-            logger.info("FitnessCache seeded with %d entries", len(entries))
+            synthetic = generate_synthetic_fitness()
+            merged = merge_fitness_entries(synthetic, db_entries)
+            app.state.fitness_cache.update(merged)
+            logger.info(
+                "FitnessCache seeded: %d synthetic + %d real -> %d merged",
+                len(synthetic), len(db_entries), len(merged),
+            )
         except Exception:
-            logger.warning("DB startup load failed — using defaults, will retry on TTL")
+            logger.warning("DB startup load failed — seeding with synthetic only")
+            app.state.fitness_cache.update(generate_synthetic_fitness())
+
+        # Policy priority: DB → YAML file → bootstrap
+        if resolved_policy is None and cfg.routing_policy_path:
+            try:
+                resolved_policy = load_policy(Path(cfg.routing_policy_path))
+                logger.info("Loaded routing policy from %s", cfg.routing_policy_path)
+            except PolicyValidationError as e:
+                logger.warning("Policy file %s failed validation: %s", cfg.routing_policy_path, e.errors)
+            except Exception:
+                logger.exception("Failed to load policy from %s", cfg.routing_policy_path)
+        if resolved_policy is None:
+            resolved_policy = default_policy(fitness_cache=app.state.fitness_cache)
+            logger.info("Using bootstrap routing policy (%d rules)", len(resolved_policy.rules))
+        app.state.routing_policy = resolved_policy
 
         fitness_refresh_task = asyncio.create_task(
             _refresh_fitness_cache(app, cfg.routing_fitness_cache_ttl_s)
@@ -269,3 +300,4 @@ app.include_router(enterprise.router, prefix="/api/v1", tags=["enterprise"])
 app.include_router(workflows.router, prefix="/api/v1", tags=["workflows"])
 app.include_router(revenue.router, prefix="/api/v1", tags=["revenue"])
 app.include_router(interop.router, prefix="/api/v1", tags=["interop"])
+app.include_router(mcp.router, prefix="/api/v1", tags=["mcp"])

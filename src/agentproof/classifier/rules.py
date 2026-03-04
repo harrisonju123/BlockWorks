@@ -24,6 +24,12 @@ TASK_KEYWORDS: dict[TaskType, list[str]] = {
         "write code", "implement", "function", "class", "refactor",
         "generate code", "create a script",
     ],
+    TaskType.CODE_REVIEW: [
+        "code review", "review code", "review this code", "review this diff",
+        "review this pr", "find bugs", "find issues", "audit", "critique",
+        "code quality", "pull request", "pr review", "diff review",
+        "security review", "peer review",
+    ],
     TaskType.REASONING: [
         "explain", "why", "reason", "analyze", "think step",
         "chain of thought", "let's think",
@@ -115,6 +121,20 @@ def classify(task_input: ClassifierInput) -> ClassificationResult:
             signals.append(f"keywords_{task_type.value}:{','.join(matched)}")
             scores[task_type] += 0.4 * len(matched)
 
+    # Signal: keyword matching from user prompt (stronger — direct intent)
+    for task_type, keywords in TASK_KEYWORDS.items():
+        matched = [kw for kw in keywords if kw in task_input.user_prompt_keywords]
+        if matched:
+            signals.append(f"user_keywords_{task_type.value}:{','.join(matched)}")
+            scores[task_type] += 0.5 * len(matched)
+
+    # Disambiguation: review keywords + code fences → code review, not generation
+    review_keywords_present = scores[TaskType.CODE_REVIEW] > 0
+    if review_keywords_present and task_input.has_code_fence_in_system:
+        signals.append("review_keywords_with_code_fence")
+        scores[TaskType.CODE_REVIEW] += 0.3
+        scores[TaskType.CODE_GENERATION] -= 0.2
+
     # Signal: output format hint
     if task_input.output_format_hint:
         hint = task_input.output_format_hint.lower()
@@ -123,8 +143,12 @@ def classify(task_input: ClassifierInput) -> ClassificationResult:
             scores[TaskType.EXTRACTION] += 0.2
             scores[TaskType.CLASSIFICATION] += 0.2
         elif hint == "code":
-            signals.append("output_hint_code")
-            scores[TaskType.CODE_GENERATION] += 0.4
+            if review_keywords_present:
+                signals.append("output_hint_code_as_review")
+                scores[TaskType.CODE_REVIEW] += 0.2
+            else:
+                signals.append("output_hint_code")
+                scores[TaskType.CODE_GENERATION] += 0.4
         elif hint == "markdown":
             signals.append("output_hint_markdown")
             scores[TaskType.SUMMARIZATION] += 0.1

@@ -8,6 +8,7 @@ import {AgentProofChannel} from "../src/AgentProofChannel.sol";
 import {AgentProofStaking} from "../src/AgentProofStaking.sol";
 import {AgentProofTrust} from "../src/AgentProofTrust.sol";
 import {AgentProofRevenue} from "../src/AgentProofRevenue.sol";
+import {AgentProofConsensus} from "../src/AgentProofConsensus.sol";
 
 /// @title Deploy all AgentProof contracts
 /// @dev Usage: forge script script/Deploy.s.sol --rpc-url anvil --broadcast
@@ -31,6 +32,11 @@ contract Deploy is Script {
         AgentProofTrust trust = new AgentProofTrust(deployer);
         AgentProofRevenue revenue = new AgentProofRevenue(token, deployer);
 
+        // Consensus contract ties staking + attestation together
+        AgentProofConsensus consensus = new AgentProofConsensus(staking, attestation, deployer);
+        attestation.grantAttestor(address(consensus));
+        staking.transferOwnership(address(consensus));
+
         vm.stopBroadcast();
 
         console.log("AgentProofToken:", address(token));
@@ -39,5 +45,6 @@ contract Deploy is Script {
         console.log("AgentProofStaking:", address(staking));
         console.log("AgentProofTrust:", address(trust));
         console.log("AgentProofRevenue:", address(revenue));
+        console.log("AgentProofConsensus:", address(consensus));
     }
 }
