@@ -56,15 +56,90 @@
 | 4D | Enterprise Multi-Tenant | infra + be1 | done | 2D | W30+ |
 | 4E | Cross-Platform Interop | be2 + web3 | done | 4A, 4C | W36+ |
 
+## Productization — Wiring & Surfacing Existing Code
+
+> Goal: All backend features exist but aren't visible/connected. Wire them up.
+
+### Sprint 1: Make Existing Features Visible (DONE 2026-03-03)
+
+| ID | Task | Status |
+|----|------|--------|
+| A1 | react-router-dom, sidebar Shell, BrowserRouter | done |
+| A2 | Events explorer page (filterable table) | done |
+| A3 | Alerts management page (rules CRUD, budget view) | done |
+| A4 | Benchmarks page (fitness matrix, results, drift) | done |
+| A5 | Waste details page | done |
+| B1 | Fix `_MAX_RECENT_DECISIONS` undefined in routing.py | done |
+| B2 | Enable feature flags in docker-compose | done |
+
+### Sprint 2: Wire Disconnected Pieces (DONE 2026-03-03)
+
+| ID | Task | Status |
+|----|------|--------|
+| C1 | Integrate `resolve()` into proxy at classification points | done |
+| C2 | Background FitnessCache refresh task | done |
+| C3 | Routing dashboard page (policy view, decisions feed, dry-run) | done |
+| D1 | Persist alerts to DB (replace in-memory dicts) | done |
+| E1 | Wire `should_sample()` into proxy + BenchmarkWorker in lifespan | done |
+| E2 | Persist benchmark config to DB | done |
+
+Simplify + code-review fixes applied:
+- Dual policy/cache bug fixed (routing.py reads app.state, not module globals)
+- Shutdown ordering fixed (workers drain before httpx clients close)
+- Anthropic multi-text-block capture fixed (accumulate, not overwrite)
+- FitnessCache eager seed on startup
+- Removed redundant SELECT before UPDATE in alerts
+- Frontend: offset=0 falsy fix, SortIndicator extraction, per-rule delete tracking
+
+### Sprint 3: Hardening & Integration (DONE 2026-03-03)
+
+| ID | Task | Status |
+|----|------|--------|
+| F1 | DB-backed routing policy storage | done |
+| F2 | Routing decisions hypertable + writer | done |
+| G1 | Proxy-to-routing E2E integration test | done |
+| G2 | Alert persistence integration test | done |
+| H2 | Event detail drawer/modal | done |
+| H3 | MCP tracing page | done |
+
+Simplify + code-review fixes applied:
+- Added missing `GET /events/{id}` endpoint (EventDrawer was calling non-existent route)
+- Rewrote `_get_active_policy` to read app.state first (no DB on every GET)
+- Extracted `_load_policy_from_row` helper (dedup between lifespan and routing.py)
+- Combined startup DB sessions (policy + fitness cache in single session)
+- `get_routing_decisions` uses window function (single round-trip)
+- Fixed decisions fallback `total > 0` semantic gap
+- `datetime.now(timezone.utc)` → `utcnow()` in tests
+- EventDrawer: `role="dialog"`, `aria-modal`, body scroll lock
+- Waste panel keyed by composite instead of array index
+- Page reset on timeRange change
+- UUID validation on event detail endpoint
+- Consistent null sentinel `"---"` across pages
+
+### Sprint 4: Blockchain Integration (DONE 2026-03-04)
+
+| ID | Task | Status |
+|----|------|--------|
+| I1 | Deploy all 6 contracts (Deploy.s.sol) | done |
+| I2 | Anvil Docker + auto-deploy (docker-compose, deploy-local.sh) | done |
+| I3 | EVMProvider implementation (web3.py async, factory auto-discovery) | done |
+| I4 | Attestation dashboard page (latest attestation, chain integrity) | done |
+
+Simplify + code-review pending.
+
+### Sprint 5+: Advanced Features (NOT STARTED)
+
 ## Codebase Stats
 
 | Metric | Value |
 |--------|-------|
-| Unit tests | 1382 passing |
+| Unit tests | 1435 passing |
+| Integration tests | 20 (8 proxy-routing, 12 alerts-db) |
 | Source packages | 25 (pipeline, classifier, api, cli, benchmarking, mcp, alerts, waste, routing, attestation, billing, compliance, channels, validators, governance, trust, sdk, fitness, registry, enterprise, workflows, revenue, interop) |
 | Solidity contracts | 6 (Attestation, Channel, Staking, Token, Trust, Revenue) |
 | API endpoints | 60+ |
-| SQL schemas | 4 (schema.sql, schema_benchmarks.sql, schema_mcp.sql, schema_alerts.sql) |
+| SQL schemas | 6 (schema.sql, schema_benchmarks.sql, schema_mcp.sql, schema_alerts.sql, schema_benchmark_config.sql, schema_routing.sql) |
+| Dashboard pages | 9 (Overview, Events, Alerts, Benchmarks, Waste, Routing, MCP Tracing, Attestations + Event Detail drawer) |
 | Integration guides | 4 (Claude Code, OpenCode, LangChain, CrewAI) |
 | ADRs | 4 (Phase 0 arch, Phase 1 arch, Attestation protocol) |
 

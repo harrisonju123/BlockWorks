@@ -1,32 +1,161 @@
-"""EVM attestation provider stub.
+"""EVM attestation provider — submits attestations to an on-chain contract.
 
-Defines the interface for submitting attestations to an EVM-compatible L2
-(Base, Optimism, etc.) via web3.py. All methods raise NotImplementedError
-until the full EVM integration is built in task 2A-4.
-
-This stub exists so that:
-  1. The factory can reference it and validate config early.
-  2. The interface is documented alongside the LocalProvider.
-  3. Type checkers see a concrete class that satisfies AttestationProvider.
+Uses web3.py 7+ async API to interact with AgentProofAttestation.sol on
+any EVM-compatible chain (Anvil local, Base L2, etc.). Embeds a minimal ABI
+covering the 5 contract functions we call, avoiding a file dependency on
+Foundry's compiled output.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+import asyncio
+from datetime import datetime, timezone
 
-from agentproof.attestation.provider import AttestationProvider
+from agentproof.attestation.provider import AttestationError, AttestationProvider
 from agentproof.attestation.types import AttestationRecord
 
-_NOT_IMPLEMENTED_MSG = "EVM provider requires web3.py — implement in 2A-4"
+# Shared ABI component lists to avoid repeating the same struct shapes.
+_ATTEST_INPUT_COMPONENTS = [
+    {"name": "orgIdHash", "type": "bytes32"},
+    {"name": "periodStart", "type": "uint40"},
+    {"name": "periodEnd", "type": "uint40"},
+    {"name": "metricsHash", "type": "bytes32"},
+    {"name": "benchmarkHash", "type": "bytes32"},
+    {"name": "merkleRoot", "type": "bytes32"},
+    {"name": "prevHash", "type": "bytes32"},
+]
+
+_ATTESTATION_OUTPUT_COMPONENTS = [
+    *_ATTEST_INPUT_COMPONENTS,
+    {"name": "nonce", "type": "uint64"},
+    {"name": "timestamp", "type": "uint40"},
+]
+
+# Minimal ABI — avoids depending on Foundry out/ artifacts at runtime.
+_ATTESTATION_ABI = [
+    {
+        "type": "function",
+        "name": "attest",
+        "inputs": list(_ATTEST_INPUT_COMPONENTS),
+        "outputs": [],
+        "stateMutability": "nonpayable",
+    },
+    {
+        "type": "function",
+        "name": "batchAttest",
+        "inputs": [
+            {
+                "name": "inputs",
+                "type": "tuple[]",
+                "components": list(_ATTEST_INPUT_COMPONENTS),
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable",
+    },
+    {
+        "type": "function",
+        "name": "getLatest",
+        "inputs": [{"name": "orgIdHash", "type": "bytes32"}],
+        "outputs": [
+            {
+                "name": "",
+                "type": "tuple",
+                "components": list(_ATTESTATION_OUTPUT_COMPONENTS),
+            }
+        ],
+        "stateMutability": "view",
+    },
+    {
+        "type": "function",
+        "name": "latestNonce",
+        "inputs": [{"name": "orgIdHash", "type": "bytes32"}],
+        "outputs": [{"name": "", "type": "uint64"}],
+        "stateMutability": "view",
+    },
+    {
+        "type": "function",
+        "name": "verify",
+        "inputs": [
+            {"name": "orgIdHash", "type": "bytes32"},
+            {"name": "nonce", "type": "uint64"},
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "tuple",
+                "components": list(_ATTESTATION_OUTPUT_COMPONENTS),
+            }
+        ],
+        "stateMutability": "view",
+    },
+]
+
+# Anvil single-attest is ~60k gas; 500k accommodates batchAttest with ~6 records.
+_DEFAULT_GAS_LIMIT = 500_000
+
+
+def _hex_to_bytes32(hex_str: str) -> bytes:
+    """Convert a 64-char hex string to 32-byte value."""
+    raw = bytes.fromhex(hex_str)
+    if len(raw) != 32:
+        raise AttestationError(f"Expected 32 bytes, got {len(raw)} from '{hex_str[:16]}...'")
+    return raw
+
+
+def _bytes32_to_hex(b: bytes) -> str:
+    """Convert 32-byte value to 64-char hex string."""
+    return b.hex()
+
+
+def _dt_to_uint40(dt: datetime) -> int:
+    """Convert datetime to uint40 unix timestamp."""
+    return int(dt.timestamp())
+
+
+def _uint40_to_dt(ts: int) -> datetime:
+    """Convert uint40 unix timestamp to datetime."""
+    return datetime.fromtimestamp(ts, tz=timezone.utc)
+
+
+def _tuple_to_record(t: tuple) -> AttestationRecord | None:
+    """Convert a contract return tuple to an AttestationRecord.
+
+    Returns None if the tuple represents a zero-initialized struct
+    (nonce == 0 means "not found" in the contract).
+    """
+    nonce = t[7]
+    if nonce == 0:
+        return None
+
+    return AttestationRecord(
+        org_id_hash=_bytes32_to_hex(t[0]),
+        period_start=_uint40_to_dt(t[1]),
+        period_end=_uint40_to_dt(t[2]),
+        metrics_hash=_bytes32_to_hex(t[3]),
+        benchmark_hash=_bytes32_to_hex(t[4]),
+        merkle_root=_bytes32_to_hex(t[5]),
+        prev_hash=_bytes32_to_hex(t[6]),
+        nonce=nonce,
+        timestamp=_uint40_to_dt(t[8]),
+    )
+
+
+def _record_to_contract_tuple(record: AttestationRecord) -> tuple:
+    """Convert an AttestationRecord to the 7-field tuple matching the contract ABI."""
+    return (
+        _hex_to_bytes32(record.org_id_hash),
+        _dt_to_uint40(record.period_start),
+        _dt_to_uint40(record.period_end),
+        _hex_to_bytes32(record.metrics_hash),
+        _hex_to_bytes32(record.benchmark_hash),
+        _hex_to_bytes32(record.merkle_root),
+        _hex_to_bytes32(record.prev_hash),
+    )
 
 
 class EVMProvider(AttestationProvider):
-    """Stub provider targeting an EVM L2 smart contract.
-
-    Constructor accepts the chain connection parameters so config
-    validation happens at startup, even though operations are not yet
-    implemented.
-    """
+    """Provider targeting an EVM smart contract via web3.py async API."""
 
     def __init__(
         self,
@@ -37,12 +166,69 @@ class EVMProvider(AttestationProvider):
         self._rpc_url = rpc_url
         self._contract_address = contract_address
         self._private_key = private_key
+        self._w3 = None
+        self._contract = None
+        self._account = None
+
+    async def _ensure_connected(self):
+        """Lazy-initialize the web3 connection and contract instance."""
+        if self._w3 is not None:
+            return
+
+        from web3 import AsyncWeb3
+        from web3.providers import AsyncHTTPProvider
+
+        self._w3 = AsyncWeb3(AsyncHTTPProvider(self._rpc_url))
+        self._account = self._w3.eth.account.from_key(self._private_key)
+        self._contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(self._contract_address),
+            abi=_ATTESTATION_ABI,
+        )
+
+    async def _send_tx(self, fn) -> str:
+        """Build, sign, send a transaction and wait for receipt."""
+        await self._ensure_connected()
+        assert self._w3 is not None and self._account is not None
+
+        nonce, gas_price = await asyncio.gather(
+            self._w3.eth.get_transaction_count(self._account.address),
+            self._w3.eth.gas_price,
+        )
+        tx = await fn.build_transaction({
+            "from": self._account.address,
+            "nonce": nonce,
+            "gas": _DEFAULT_GAS_LIMIT,
+            "gasPrice": gas_price,
+        })
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash)
+
+        if receipt["status"] != 1:
+            raise AttestationError(
+                f"Transaction reverted: {tx_hash.hex()}"
+            )
+
+        return tx_hash.hex()
 
     async def submit(self, record: AttestationRecord) -> str:
-        raise NotImplementedError(_NOT_IMPLEMENTED_MSG)
+        await self._ensure_connected()
+        assert self._contract is not None
+
+        fn = self._contract.functions.attest(*_record_to_contract_tuple(record))
+        return await self._send_tx(fn)
 
     async def batch_submit(self, records: list[AttestationRecord]) -> list[str]:
-        raise NotImplementedError(_NOT_IMPLEMENTED_MSG)
+        if not records:
+            return []
+
+        await self._ensure_connected()
+        assert self._contract is not None
+
+        tuples = [_record_to_contract_tuple(r) for r in records]
+        fn = self._contract.functions.batchAttest(tuples)
+        tx_hash = await self._send_tx(fn)
+        return [tx_hash] * len(records)
 
     async def verify(
         self,
@@ -50,10 +236,47 @@ class EVMProvider(AttestationProvider):
         period_start: datetime,
         period_end: datetime,
     ) -> AttestationRecord | None:
-        raise NotImplementedError(_NOT_IMPLEMENTED_MSG)
+        """Walk nonces backward to find a record matching the period."""
+        await self._ensure_connected()
+        assert self._contract is not None
+
+        latest_nonce = await self.get_latest_nonce(org_id_hash)
+        if latest_nonce == 0:
+            return None
+
+        org_bytes = _hex_to_bytes32(org_id_hash)
+        ps_ts = _dt_to_uint40(period_start)
+        pe_ts = _dt_to_uint40(period_end)
+
+        for nonce in range(latest_nonce, 0, -1):
+            result = await self._contract.functions.verify(org_bytes, nonce).call()
+            record = _tuple_to_record(result)
+            if record is None:
+                continue
+            # Early exit: periods are monotonically increasing, so stop
+            # once we've passed the target window.
+            record_pe = _dt_to_uint40(record.period_end)
+            if record_pe < ps_ts:
+                break
+            if (
+                _dt_to_uint40(record.period_start) == ps_ts
+                and record_pe == pe_ts
+            ):
+                return record
+
+        return None
 
     async def get_latest(self, org_id_hash: str) -> AttestationRecord | None:
-        raise NotImplementedError(_NOT_IMPLEMENTED_MSG)
+        await self._ensure_connected()
+        assert self._contract is not None
+
+        org_bytes = _hex_to_bytes32(org_id_hash)
+        result = await self._contract.functions.getLatest(org_bytes).call()
+        return _tuple_to_record(result)
 
     async def get_latest_nonce(self, org_id_hash: str) -> int:
-        raise NotImplementedError(_NOT_IMPLEMENTED_MSG)
+        await self._ensure_connected()
+        assert self._contract is not None
+
+        org_bytes = _hex_to_bytes32(org_id_hash)
+        return await self._contract.functions.latestNonce(org_bytes).call()

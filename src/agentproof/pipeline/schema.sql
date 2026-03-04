@@ -170,7 +170,15 @@ SELECT add_continuous_aggregate_policy('daily_summary',
     end_offset => INTERVAL '1 day',
     schedule_interval => INTERVAL '1 day');
 
--- Compression: compress chunks older than 7 days
+-- Compression: enable on hypertables, then compress chunks older than 7 days
+ALTER TABLE llm_events SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'provider, model'
+);
+ALTER TABLE tool_calls SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'event_id'
+);
 SELECT add_compression_policy('llm_events', INTERVAL '7 days');
 SELECT add_compression_policy('tool_calls', INTERVAL '7 days');
 

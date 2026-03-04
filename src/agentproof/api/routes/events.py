@@ -1,8 +1,9 @@
 """Event listing and detail endpoints."""
 
+import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,4 +93,42 @@ async def list_events(
         events=events,
         total_count=total_count,
         has_more=(offset + limit) < total_count,
+    )
+
+
+@router.get("/events/{event_id}", response_model=EventDetail)
+async def get_event(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> EventDetail:
+    """Fetch a single event by ID."""
+    try:
+        uuid.UUID(event_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid event ID format")
+
+    query = text("SELECT * FROM llm_events WHERE id = :id LIMIT 1")
+    result = await db.execute(query, {"id": event_id})
+    row = result.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    m = row._mapping
+    return EventDetail(
+        id=str(m["id"]),
+        created_at=m["created_at"],
+        status=m["status"],
+        provider=m["provider"],
+        model=m["model"],
+        prompt_tokens=m["prompt_tokens"],
+        completion_tokens=m["completion_tokens"],
+        total_tokens=m["total_tokens"],
+        estimated_cost=m["estimated_cost"],
+        latency_ms=m["latency_ms"],
+        trace_id=m["trace_id"],
+        span_id=m["span_id"],
+        task_type=m["task_type"],
+        task_type_confidence=m["task_type_confidence"],
+        has_tool_calls=m["has_tool_calls"],
+        agent_framework=m["agent_framework"],
     )

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentproof.alerts.types import (
     AlertChannel,
@@ -15,7 +15,17 @@ from agentproof.alerts.types import (
     BudgetPeriod,
     RuleType,
 )
-from agentproof.utils import utcnow
+from agentproof.api.deps import get_db
+from agentproof.db.queries import (
+    delete_alert_rule as db_delete_alert_rule,
+    get_alert_history as db_get_alert_history,
+    get_alert_rules as db_get_alert_rules,
+    get_budget_by_id,
+    get_budget_configs as db_get_budget_configs,
+    insert_alert_rule,
+    insert_budget_config,
+    update_alert_rule as db_update_alert_rule,
+)
 
 router = APIRouter()
 
@@ -100,12 +110,49 @@ class BudgetStatusResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# In-memory stores (replaced by DB queries once wired to sqlalchemy)
+# Helpers
 # ---------------------------------------------------------------------------
 
-_alert_rules: dict[str, AlertRuleResponse] = {}
-_alert_history: list[AlertHistoryItem] = []
-_budget_configs: dict[str, BudgetResponse] = {}
+
+def _row_to_alert_rule(row: dict) -> AlertRuleResponse:
+    """Map a DB row dict into the API response model."""
+    return AlertRuleResponse(
+        id=str(row["id"]),
+        org_id=row["org_id"],
+        rule_type=row["rule_type"],
+        threshold_config=row["threshold_config"],
+        channel=row["channel"],
+        webhook_url=row["webhook_url"],
+        enabled=row["enabled"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _row_to_alert_history(row: dict) -> AlertHistoryItem:
+    return AlertHistoryItem(
+        id=str(row["id"]),
+        rule_id=str(row["rule_id"]),
+        triggered_at=row["triggered_at"],
+        message=row["message"],
+        severity=row["severity"],
+        resolved=row["resolved"],
+        resolved_at=row.get("resolved_at"),
+    )
+
+
+def _row_to_budget(row: dict) -> BudgetResponse:
+    return BudgetResponse(
+        id=str(row["id"]),
+        org_id=row["org_id"],
+        project_id=row.get("project_id"),
+        budget_usd=float(row["budget_usd"]),
+        period=row["period"],
+        action=row["action"],
+        current_spend=float(row["current_spend"]),
+        period_start=row["period_start"],
+        created_at=row["created_at"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -116,52 +163,54 @@ _budget_configs: dict[str, BudgetResponse] = {}
 @router.get("/alerts/rules", response_model=list[AlertRuleResponse])
 async def list_alert_rules(
     org_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
 ) -> list[AlertRuleResponse]:
-    rules = list(_alert_rules.values())
-    if org_id:
-        rules = [r for r in rules if r.org_id == org_id]
-    return rules
+    rows = await db_get_alert_rules(db, org_id=org_id)
+    return [_row_to_alert_rule(r) for r in rows]
 
 
 @router.post("/alerts/rules", response_model=AlertRuleResponse, status_code=201)
-async def create_alert_rule(body: AlertRuleCreate) -> AlertRuleResponse:
-    now = utcnow()
-    rule = AlertRuleResponse(
-        id=str(uuid.uuid4()),
+async def create_alert_rule(
+    body: AlertRuleCreate,
+    db: AsyncSession = Depends(get_db),
+) -> AlertRuleResponse:
+    row = await insert_alert_rule(
+        db,
         org_id=body.org_id,
-        rule_type=body.rule_type,
+        rule_type=body.rule_type.value,
         threshold_config=body.threshold_config,
-        channel=body.channel,
+        channel=body.channel.value,
         webhook_url=body.webhook_url,
         enabled=body.enabled,
-        created_at=now,
-        updated_at=now,
     )
-    _alert_rules[rule.id] = rule
-    return rule
+    return _row_to_alert_rule(row)
 
 
 @router.put("/alerts/rules/{rule_id}", response_model=AlertRuleResponse)
-async def update_alert_rule(rule_id: str, body: AlertRuleUpdate) -> AlertRuleResponse:
-    existing = _alert_rules.get(rule_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Alert rule not found")
-
-    updated_data = existing.model_dump()
+async def update_alert_rule(
+    rule_id: str,
+    body: AlertRuleUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> AlertRuleResponse:
     update_fields = body.model_dump(exclude_unset=True)
-    updated_data.update(update_fields)
-    updated_data["updated_at"] = utcnow()
+    # Enum values need to be serialized to their string form for the DB
+    if "channel" in update_fields and update_fields["channel"] is not None:
+        update_fields["channel"] = update_fields["channel"].value
 
-    updated = AlertRuleResponse(**updated_data)
-    _alert_rules[rule_id] = updated
-    return updated
+    row = await db_update_alert_rule(db, rule_id, **update_fields)
+    if not row:
+        raise HTTPException(status_code=404, detail="Alert rule not found")
+    return _row_to_alert_rule(row)
 
 
 @router.delete("/alerts/rules/{rule_id}", status_code=204)
-async def delete_alert_rule(rule_id: str) -> None:
-    if rule_id not in _alert_rules:
+async def delete_alert_rule(
+    rule_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    deleted = await db_delete_alert_rule(db, rule_id)
+    if not deleted:
         raise HTTPException(status_code=404, detail="Alert rule not found")
-    del _alert_rules[rule_id]
 
 
 # ---------------------------------------------------------------------------
@@ -174,13 +223,11 @@ async def get_alert_history(
     org_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
 ) -> AlertHistoryResponse:
-    # In-memory implementation; production reads from alert_history hypertable
-    items = _alert_history
-    total = len(items)
-    page = items[offset : offset + limit]
+    rows, total = await db_get_alert_history(db, org_id=org_id, limit=limit, offset=offset)
     return AlertHistoryResponse(
-        items=page,
+        items=[_row_to_alert_history(r) for r in rows],
         total_count=total,
         has_more=(offset + limit) < total,
     )
@@ -194,52 +241,47 @@ async def get_alert_history(
 @router.get("/budgets", response_model=list[BudgetResponse])
 async def list_budgets(
     org_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
 ) -> list[BudgetResponse]:
-    budgets = list(_budget_configs.values())
-    if org_id:
-        budgets = [b for b in budgets if b.org_id == org_id]
-    return budgets
+    rows = await db_get_budget_configs(db, org_id=org_id)
+    return [_row_to_budget(r) for r in rows]
 
 
 @router.post("/budgets", response_model=BudgetResponse, status_code=201)
-async def create_budget(body: BudgetCreate) -> BudgetResponse:
-    now = utcnow()
-    budget = BudgetResponse(
-        id=str(uuid.uuid4()),
+async def create_budget(
+    body: BudgetCreate,
+    db: AsyncSession = Depends(get_db),
+) -> BudgetResponse:
+    row = await insert_budget_config(
+        db,
         org_id=body.org_id,
         project_id=body.project_id,
         budget_usd=body.budget_usd,
-        period=body.period,
-        action=body.action,
-        current_spend=0.0,
-        period_start=now,
-        created_at=now,
+        period=body.period.value,
+        action=body.action.value,
     )
-    _budget_configs[budget.id] = budget
-    return budget
+    return _row_to_budget(row)
 
 
 @router.get("/budgets/{budget_id}/status", response_model=BudgetStatusResponse)
-async def get_budget_status(budget_id: str) -> BudgetStatusResponse:
-    budget = _budget_configs.get(budget_id)
-    if not budget:
+async def get_budget_status(
+    budget_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> BudgetStatusResponse:
+    row = await get_budget_by_id(db, budget_id)
+    if not row:
         raise HTTPException(status_code=404, detail="Budget not found")
 
-    utilization = (budget.current_spend / budget.budget_usd * 100) if budget.budget_usd > 0 else 0.0
+    budget_usd = float(row["budget_usd"])
+    current_spend = float(row["current_spend"])
+    utilization = (current_spend / budget_usd * 100) if budget_usd > 0 else 0.0
 
     return BudgetStatusResponse(
-        id=budget.id,
-        budget_usd=budget.budget_usd,
-        current_spend=budget.current_spend,
+        id=str(row["id"]),
+        budget_usd=budget_usd,
+        current_spend=current_spend,
         utilization_pct=utilization,
-        period=budget.period,
-        action=budget.action,
-        period_start=budget.period_start,
+        period=row["period"],
+        action=row["action"],
+        period_start=row["period_start"],
     )
-
-
-def reset_stores() -> None:
-    """Clear in-memory stores. Used by tests to get a clean state."""
-    _alert_rules.clear()
-    _alert_history.clear()
-    _budget_configs.clear()

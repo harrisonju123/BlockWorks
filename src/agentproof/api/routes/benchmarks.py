@@ -13,11 +13,15 @@ from agentproof.benchmarking.accountability import (
     AccountabilityReport,
     generate_report,
 )
-from agentproof.benchmarking.drift import DriftReport, detect_drift
-from agentproof.benchmarking.types import BenchmarkConfig, BenchmarkResult, FitnessEntry
+from agentproof.benchmarking.drift import detect_drift
+from agentproof.benchmarking.types import BenchmarkResult, FitnessEntry
 from agentproof.config import get_config
-from agentproof.db.queries import get_benchmark_results, get_fitness_matrix
-from agentproof.types import TaskType
+from agentproof.db.queries import (
+    get_benchmark_config_from_db,
+    get_benchmark_results,
+    get_fitness_matrix,
+    upsert_benchmark_config,
+)
 
 router = APIRouter(prefix="/benchmarks")
 
@@ -104,23 +108,18 @@ class GenerateReportRequest(BaseModel):
     lookback_days: int = Field(default=30, ge=7, le=90)
 
 
-# -- In-memory config store (replaced by DB in a future PR) -------------------
-# The benchmark config is stored in memory for now. The POST endpoint
-# updates this mutable state. On restart it resets to env var defaults.
-
-_runtime_config: BenchmarkConfig | None = None
+# -- Helpers -------------------------------------------------------------------
 
 
-def _get_runtime_config() -> BenchmarkConfig:
-    global _runtime_config
-    if _runtime_config is None:
-        cfg = get_config()
-        _runtime_config = BenchmarkConfig(
-            sample_rate=cfg.benchmark_sample_rate,
-            benchmark_models=cfg.benchmark_models,
-            judge_model=cfg.benchmark_judge_model,
-        )
-    return _runtime_config
+def _config_from_row(row: dict, env_cfg) -> BenchmarkConfigResponse:
+    """Build a BenchmarkConfigResponse from a DB row + env config for 'enabled'."""
+    return BenchmarkConfigResponse(
+        enabled=env_cfg.benchmark_enabled,
+        sample_rate=float(row["sample_rate"]),
+        benchmark_models=list(row["benchmark_models"]),
+        judge_model=row["judge_model"],
+        enabled_task_types=list(row["enabled_task_types"]),
+    )
 
 
 # -- Endpoints -----------------------------------------------------------------
@@ -183,54 +182,43 @@ async def benchmark_results(
 
 
 @router.get("/config", response_model=BenchmarkConfigResponse)
-async def get_benchmark_config() -> BenchmarkConfigResponse:
-    """Returns the current benchmark configuration."""
+async def get_benchmark_config(
+    db: AsyncSession = Depends(get_db),
+) -> BenchmarkConfigResponse:
+    """Returns the current benchmark configuration from the DB."""
     cfg = get_config()
-    runtime = _get_runtime_config()
-    return BenchmarkConfigResponse(
-        enabled=cfg.benchmark_enabled,
-        sample_rate=runtime.sample_rate,
-        benchmark_models=runtime.benchmark_models,
-        judge_model=runtime.judge_model,
-        enabled_task_types=[t.value for t in runtime.enabled_task_types],
-    )
+    row = await get_benchmark_config_from_db(db)
+    if row is None:
+        # No DB row yet — return env-var defaults
+        return BenchmarkConfigResponse(
+            enabled=cfg.benchmark_enabled,
+            sample_rate=cfg.benchmark_sample_rate,
+            benchmark_models=cfg.benchmark_models,
+            judge_model=cfg.benchmark_judge_model,
+            enabled_task_types=[],
+        )
+    return _config_from_row(row, cfg)
 
 
 @router.post("/config", response_model=BenchmarkConfigResponse)
 async def update_benchmark_config(
     update: BenchmarkConfigUpdate,
+    db: AsyncSession = Depends(get_db),
 ) -> BenchmarkConfigResponse:
-    """Update the benchmark configuration at runtime.
+    """Update the benchmark configuration.
 
     Only the fields present in the request body are updated.
-    Changes take effect immediately but do not persist across restarts.
+    Changes persist across restarts via the benchmark_config DB table.
     """
-    global _runtime_config
-    current = _get_runtime_config()
-
-    new_sample_rate = update.sample_rate if update.sample_rate is not None else current.sample_rate
-    new_models = update.benchmark_models if update.benchmark_models is not None else current.benchmark_models
-    new_judge = update.judge_model if update.judge_model is not None else current.judge_model
-
-    new_task_types = current.enabled_task_types
-    if update.enabled_task_types is not None:
-        new_task_types = [TaskType(t) for t in update.enabled_task_types]
-
-    _runtime_config = BenchmarkConfig(
-        sample_rate=new_sample_rate,
-        benchmark_models=new_models,
-        judge_model=new_judge,
-        enabled_task_types=new_task_types,
+    row = await upsert_benchmark_config(
+        db,
+        sample_rate=update.sample_rate,
+        benchmark_models=update.benchmark_models,
+        judge_model=update.judge_model,
+        enabled_task_types=update.enabled_task_types,
     )
-
     cfg = get_config()
-    return BenchmarkConfigResponse(
-        enabled=update.enabled if update.enabled is not None else cfg.benchmark_enabled,
-        sample_rate=_runtime_config.sample_rate,
-        benchmark_models=_runtime_config.benchmark_models,
-        judge_model=_runtime_config.judge_model,
-        enabled_task_types=[t.value for t in _runtime_config.enabled_task_types],
-    )
+    return _config_from_row(row, cfg)
 
 
 # -- In-memory report store (replaced by DB in a future PR) -------------------

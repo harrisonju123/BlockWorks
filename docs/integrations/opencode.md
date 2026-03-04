@@ -53,7 +53,7 @@ Then run OpenCode normally -- it will route through the proxy.
 
 ## Model Name Mapping
 
-OpenCode sends the model name you configure. Map these to the aliases defined in `litellm-config.yaml`:
+OpenCode sends the model name you configure. Map these to the aliases defined in `litellm-config.example.yaml`:
 
 | OpenCode model config | LiteLLM alias | Routes to |
 |---|---|---|
@@ -64,7 +64,7 @@ OpenCode sends the model name you configure. Map these to the aliases defined in
 | `gpt-4o-mini` | `gpt-4o-mini` | `gpt-4o-mini` |
 | `claude-sonnet-4-20250514` | `claude-sonnet-4-20250514` | `claude-sonnet-4-20250514` |
 
-Use the alias names (left column) in your OpenCode config. If you need a model that isn't listed, add it to `litellm-config.yaml`.
+Use the alias names (left column) in your OpenCode config. If you need a model that isn't listed, add it to `litellm-config.example.yaml`.
 
 ## Verification
 
@@ -78,7 +78,7 @@ curl -s http://localhost:8100/api/v1/events | jq '.count'
 agentproof stats
 
 # Dashboard
-open http://localhost:5173
+open http://localhost:8081
 ```
 
 ## Example Session
@@ -130,7 +130,7 @@ Set the API key to the LiteLLM master key (`sk-local-dev-key`), not your real pr
 
 **Model not found**
 
-OpenCode sends whatever model name you configure. It must match an entry in `litellm-config.yaml`. Check available models:
+OpenCode sends whatever model name you configure. It must match an entry in `litellm-config.example.yaml`. Check available models:
 
 ```bash
 curl -s http://localhost:4000/v1/models -H "Authorization: Bearer sk-local-dev-key" | jq '.data[].id'

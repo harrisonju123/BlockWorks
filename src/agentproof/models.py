@@ -37,7 +37,19 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_output=0.075,
         downgrade_to="claude-sonnet-4-20250514",
     ),
+    "claude-opus-4-6": ModelInfo(
+        tier=1,
+        cost_per_1k_input=0.015,
+        cost_per_1k_output=0.075,
+        downgrade_to="claude-sonnet-4-6",
+    ),
     # ── Tier 2: Sonnet / GPT-4o class ──────────────────────────────
+    "claude-sonnet-4-6": ModelInfo(
+        tier=2,
+        cost_per_1k_input=0.003,
+        cost_per_1k_output=0.015,
+        downgrade_to="claude-haiku-4-5-20251001",
+    ),
     "gpt-4o": ModelInfo(
         tier=2,
         cost_per_1k_input=0.0025,

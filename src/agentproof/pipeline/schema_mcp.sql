@@ -48,5 +48,9 @@ CREATE INDEX idx_mcp_graph_child ON mcp_execution_graph (child_call_id);
 
 
 -- Compression and retention for the mcp_calls hypertable
+ALTER TABLE mcp_calls SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'server_name'
+);
 SELECT add_compression_policy('mcp_calls', INTERVAL '7 days');
 SELECT add_retention_policy('mcp_calls', INTERVAL '90 days');

@@ -1,28 +1,29 @@
-.PHONY: dev down reset test lint typecheck ci dashboard
+.PHONY: dev dev-proxy down reset logs db-shell test test-unit test-integration lint fmt typecheck ci install claude forge-test deploy-local
 
-# Start the full local stack (DB + LiteLLM proxy + API)
+# Start full stack (DB + API + Dashboard)
 dev:
-	docker compose up -d db litellm
-	@echo "Waiting for DB to be healthy..."
-	@docker compose exec db pg_isready -U agentproof -q || sleep 2
-	uvicorn agentproof.api.app:app --host 0.0.0.0 --port 8100 --reload
-
-# Start everything in Docker (no local Python)
-dev-docker:
 	docker compose up --build
+
+# Start full stack + local LiteLLM proxy (for testing the callback locally)
+dev-proxy:
+	docker compose --profile proxy up --build
 
 # Stop all services
 down:
 	docker compose down
 
-# Full teardown: remove volumes, rebuild
+# Full teardown: wipe DB volumes + rebuild
 reset:
 	docker compose down -v
-	docker compose up --build -d
+	docker compose up --build
 
-# Run tests
-test:
-	pytest tests/ -v --cov=agentproof --cov-report=term-missing
+# Tail logs
+logs:
+	docker compose logs -f
+
+# DB shell
+db-shell:
+	docker compose exec db psql -U agentproof
 
 # Run unit tests only (fast)
 test-unit:
@@ -32,7 +33,11 @@ test-unit:
 test-integration:
 	pytest tests/integration/ -v
 
-# Lint and format
+# Run all tests with coverage
+test:
+	pytest tests/ -v --cov=agentproof --cov-report=term-missing
+
+# Lint and format check
 lint:
 	ruff check src/ tests/
 	ruff format --check src/ tests/
@@ -49,15 +54,19 @@ typecheck:
 # Full CI check
 ci: lint typecheck test
 
-# Dashboard dev server
-dashboard:
-	cd dashboard && pnpm dev
+# Launch Claude Code through the AgentProof proxy
+claude:
+	ANTHROPIC_BASE_URL=http://localhost:8100 claude
+
+# Run Foundry contract tests
+forge-test:
+	cd contracts && forge test -v
+
+# Deploy contracts to local Anvil
+deploy-local:
+	cd contracts && DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast
 
 # Install dev dependencies
 install:
 	pip install -e ".[dev]"
 	cd dashboard && pnpm install
-
-# DB shell
-db-shell:
-	docker compose exec db psql -U agentproof

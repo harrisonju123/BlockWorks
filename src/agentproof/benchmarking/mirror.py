@@ -43,7 +43,26 @@ _BENCH_COLUMNS = [
 ]
 
 
-def should_sample(event: LLMEvent, config: BenchmarkConfig) -> bool:
+def _has_anthropic_content(messages: list[dict]) -> bool:
+    """Check if messages use Anthropic-native format (tool_result blocks).
+
+    LiteLLM's acompletion() only accepts OpenAI-format messages. Anthropic uses
+    content arrays with type=tool_result in user messages, which must be skipped.
+    """
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    return True
+    return False
+
+
+def should_sample(
+    event: LLMEvent,
+    config: BenchmarkConfig,
+    messages: list[dict] | None = None,
+) -> bool:
     """Decide whether to benchmark an event based on the config.
 
     An event is sampled when:
@@ -51,6 +70,7 @@ def should_sample(event: LLMEvent, config: BenchmarkConfig) -> bool:
     2. The event's task_type is in the enabled list
     3. The event was successful (no point benchmarking failures)
     4. The event has a task_type (UNKNOWN is excluded)
+    5. The messages are in OpenAI format (not Anthropic-native)
     """
     if config.sample_rate <= 0.0:
         return False
@@ -62,6 +82,10 @@ def should_sample(event: LLMEvent, config: BenchmarkConfig) -> bool:
         return False
 
     if event.task_type not in config.enabled_task_types:
+        return False
+
+    # Skip Anthropic-native messages — LiteLLM can't replay them
+    if messages and _has_anthropic_content(messages):
         return False
 
     # sample_rate of 1.0 means always benchmark

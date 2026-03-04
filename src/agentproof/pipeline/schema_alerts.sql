@@ -66,5 +66,9 @@ CREATE INDEX idx_alert_hist_open ON alert_history (resolved_at)
     WHERE resolved_at IS NULL;
 
 -- Compression and retention
+ALTER TABLE alert_history SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'rule_id'
+);
 SELECT add_compression_policy('alert_history', INTERVAL '30 days');
 SELECT add_retention_policy('alert_history', INTERVAL '365 days');

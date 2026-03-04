@@ -21,3 +21,8 @@ export function formatMs(ms: number): string {
   if (ms >= 1_000) return `${(ms / 1_000).toFixed(1)}s`;
   return `${ms.toFixed(0)}ms`;
 }
+
+export function truncateHash(hash: string, startLen = 8, endLen = 4): string {
+  if (hash.length <= startLen + endLen) return hash;
+  return `${hash.slice(0, startLen)}\u2026${hash.slice(-endLen)}`;
+}

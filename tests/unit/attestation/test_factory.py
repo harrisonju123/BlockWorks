@@ -43,7 +43,7 @@ class TestCreateProvider:
             )
 
     def test_evm_type_missing_contract_address_raises(self) -> None:
-        with pytest.raises(ValueError, match="attestation_contract_address"):
+        with pytest.raises(ValueError, match="attestation_contract_address|deployments"):
             create_provider(
                 provider_type="evm",
                 rpc_url="https://rpc.example.com",
@@ -53,8 +53,7 @@ class TestCreateProvider:
         with pytest.raises(ValueError, match="Unknown attestation provider"):
             create_provider(provider_type="solana")
 
-    @pytest.mark.asyncio
-    async def test_evm_provider_methods_raise_not_implemented(self) -> None:
+    def test_evm_provider_stores_config(self) -> None:
         provider = create_provider(
             provider_type="evm",
             rpc_url="https://rpc.example.com",
@@ -62,5 +61,6 @@ class TestCreateProvider:
             private_key="0xbeef",
         )
         assert isinstance(provider, EVMProvider)
-        with pytest.raises(NotImplementedError, match="2A-4"):
-            await provider.submit(None)  # type: ignore[arg-type]
+        assert provider._rpc_url == "https://rpc.example.com"
+        assert provider._contract_address == "0x1234"
+        assert provider._private_key == "0xbeef"

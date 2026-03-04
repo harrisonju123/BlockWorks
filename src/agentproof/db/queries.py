@@ -12,8 +12,19 @@ from datetime import datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import json
+import uuid
+
 from agentproof.attestation.types import AttestationMetrics, TraceEvaluation
 from agentproof.benchmarking.types import FitnessEntry
+from agentproof.utils import utcnow
+
+# asyncpg requires timedelta objects for interval bind params (not strings)
+_INTERVAL_MAP: dict[str, timedelta] = {
+    "1h": timedelta(hours=1),
+    "6h": timedelta(hours=6),
+    "1d": timedelta(days=1),
+}
 
 
 async def get_summary_stats(
@@ -102,8 +113,7 @@ async def get_timeseries(
 
     The pg_interval is passed as a bind parameter to avoid SQL interpolation.
     """
-    interval_map = {"1h": "1 hour", "6h": "6 hours", "1d": "1 day"}
-    pg_interval = interval_map.get(interval, "1 hour")
+    pg_interval = _INTERVAL_MAP.get(interval, timedelta(hours=1))
 
     if interval == "1d":
         # daily_summary columns: bucket, provider, model, task_type, org_id,
@@ -131,7 +141,7 @@ async def get_timeseries(
 
         query = text(f"""
             SELECT
-                time_bucket(CAST(:bucket_interval AS INTERVAL), bucket) AS timestamp,
+                time_bucket(:bucket_interval, bucket) AS timestamp,
                 {agg_metric_map[metric]} AS value
             FROM daily_summary
             WHERE {where}
@@ -168,7 +178,7 @@ async def get_timeseries(
 
         query = text(f"""
             SELECT
-                time_bucket(CAST(:bucket_interval AS INTERVAL), bucket) AS timestamp,
+                time_bucket(:bucket_interval, bucket) AS timestamp,
                 {agg_metric_map[metric]} AS value
             FROM hourly_model_stats
             WHERE {where}
@@ -199,8 +209,7 @@ async def _get_timeseries_raw(
     if metric not in metric_map:
         raise ValueError(f"metric must be one of {set(metric_map)}")
 
-    interval_map = {"1h": "1 hour", "6h": "6 hours", "1d": "1 day"}
-    pg_interval = interval_map.get(interval, "1 hour")
+    pg_interval = _INTERVAL_MAP.get(interval, timedelta(hours=1))
 
     filters = ["created_at >= :start", "created_at < :end"]
     params: dict = {"start": start, "end": end, "bucket_interval": pg_interval}
@@ -216,7 +225,7 @@ async def _get_timeseries_raw(
 
     query = text(f"""
         SELECT
-            time_bucket(CAST(:bucket_interval AS INTERVAL), created_at) AS timestamp,
+            time_bucket(:bucket_interval, created_at) AS timestamp,
             {metric_map[metric]} AS value
         FROM llm_events
         WHERE {where}
@@ -585,16 +594,15 @@ async def get_prompt_hash_duplicates(
               AND prompt_hash IS NOT NULL
             GROUP BY prompt_hash
             HAVING COUNT(*) >= 2
-               AND (MAX(created_at) - MIN(created_at)) <= CAST(:window AS INTERVAL)
+               AND (MAX(created_at) - MIN(created_at)) <= :window
         )
         SELECT *
         FROM windowed
         ORDER BY total_cost DESC
     """)
 
-    window_interval = f"{window_hours} hours"
     result = await session.execute(
-        query, {"start": start, "end": end, "window": window_interval}
+        query, {"start": start, "end": end, "window": timedelta(hours=window_hours)}
     )
     return [dict(row._mapping) for row in result.fetchall()]
 
@@ -751,3 +759,410 @@ async def get_trace_evaluations(
         )
         for row in [dict(r._mapping) for r in result.fetchall()]
     ]
+
+
+# ---------------------------------------------------------------------------
+# Alert rules
+# ---------------------------------------------------------------------------
+
+
+async def insert_alert_rule(
+    session: AsyncSession,
+    *,
+    org_id: str,
+    rule_type: str,
+    threshold_config: dict,
+    channel: str,
+    webhook_url: str | None,
+    enabled: bool,
+) -> dict:
+    """Insert a new alert rule and return the created row."""
+    rule_id = str(uuid.uuid4())
+    now = utcnow()
+
+    query = text("""
+        INSERT INTO alert_rules
+            (id, org_id, rule_type, threshold_config, channel, webhook_url, enabled, created_at, updated_at)
+        VALUES
+            (:id, :org_id, :rule_type, :threshold_config::jsonb, :channel, :webhook_url, :enabled, :created_at, :updated_at)
+        RETURNING *
+    """)
+
+    result = await session.execute(query, {
+        "id": rule_id,
+        "org_id": org_id,
+        "rule_type": rule_type,
+        "threshold_config": json.dumps(threshold_config),
+        "channel": channel,
+        "webhook_url": webhook_url,
+        "enabled": enabled,
+        "created_at": now,
+        "updated_at": now,
+    })
+    await session.commit()
+    return dict(result.fetchone()._mapping)
+
+
+async def get_alert_rules(
+    session: AsyncSession,
+    org_id: str | None = None,
+) -> list[dict]:
+    """Fetch all alert rules, optionally filtered by org_id."""
+    if org_id:
+        query = text("""
+            SELECT * FROM alert_rules
+            WHERE org_id = :org_id
+            ORDER BY created_at DESC
+        """)
+        result = await session.execute(query, {"org_id": org_id})
+    else:
+        query = text("SELECT * FROM alert_rules ORDER BY created_at DESC")
+        result = await session.execute(query)
+
+    return [dict(row._mapping) for row in result.fetchall()]
+
+
+async def get_alert_rule_by_id(
+    session: AsyncSession,
+    rule_id: str,
+) -> dict | None:
+    """Fetch a single alert rule by primary key. Returns None if not found."""
+    query = text("SELECT * FROM alert_rules WHERE id = :id")
+    result = await session.execute(query, {"id": rule_id})
+    row = result.fetchone()
+    return dict(row._mapping) if row else None
+
+
+async def update_alert_rule(
+    session: AsyncSession,
+    rule_id: str,
+    **fields: object,
+) -> dict | None:
+    """Patch an alert rule with the given fields. Returns the updated row or None."""
+    allowed = {"threshold_config", "channel", "webhook_url", "enabled"}
+    set_parts: list[str] = []
+    params: dict = {"id": rule_id, "updated_at": utcnow()}
+
+    for key, value in fields.items():
+        if key not in allowed:
+            continue
+        if key == "threshold_config":
+            set_parts.append("threshold_config = :threshold_config::jsonb")
+            params["threshold_config"] = json.dumps(value)
+        else:
+            set_parts.append(f"{key} = :{key}")
+            params[key] = value
+
+    if not set_parts:
+        return await get_alert_rule_by_id(session, rule_id)
+
+    set_parts.append("updated_at = :updated_at")
+    set_clause = ", ".join(set_parts)
+
+    query = text(f"""
+        UPDATE alert_rules
+        SET {set_clause}
+        WHERE id = :id
+        RETURNING *
+    """)
+
+    result = await session.execute(query, params)
+    await session.commit()
+    row = result.fetchone()
+    return dict(row._mapping) if row else None
+
+
+async def delete_alert_rule(
+    session: AsyncSession,
+    rule_id: str,
+) -> bool:
+    """Delete an alert rule. Returns True if a row was deleted."""
+    query = text("DELETE FROM alert_rules WHERE id = :id")
+    result = await session.execute(query, {"id": rule_id})
+    await session.commit()
+    return result.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Alert history
+# ---------------------------------------------------------------------------
+
+
+async def get_alert_history(
+    session: AsyncSession,
+    org_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    """Paginated alert history, optionally scoped to rules belonging to an org.
+
+    Returns (rows, total_count).
+    """
+    org_join = ""
+    org_filter = ""
+    params: dict = {"limit": limit, "offset": offset}
+
+    if org_id:
+        org_join = "JOIN alert_rules ar ON ar.id = ah.rule_id"
+        org_filter = "WHERE ar.org_id = :org_id"
+        params["org_id"] = org_id
+
+    count_query = text(f"""
+        SELECT COUNT(*) AS cnt
+        FROM alert_history ah
+        {org_join}
+        {org_filter}
+    """)
+    count_result = await session.execute(count_query, params)
+    total_count = count_result.scalar() or 0
+
+    data_query = text(f"""
+        SELECT ah.*
+        FROM alert_history ah
+        {org_join}
+        {org_filter}
+        ORDER BY ah.triggered_at DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    result = await session.execute(data_query, params)
+    rows = [dict(row._mapping) for row in result.fetchall()]
+    return rows, total_count
+
+
+# ---------------------------------------------------------------------------
+# Budget configs
+# ---------------------------------------------------------------------------
+
+
+async def insert_budget_config(
+    session: AsyncSession,
+    *,
+    org_id: str,
+    project_id: str | None,
+    budget_usd: float,
+    period: str,
+    action: str,
+) -> dict:
+    """Insert a new budget config and return the created row."""
+    budget_id = str(uuid.uuid4())
+    now = utcnow()
+
+    query = text("""
+        INSERT INTO budget_configs
+            (id, org_id, project_id, budget_usd, period, action, current_spend, period_start, created_at)
+        VALUES
+            (:id, :org_id, :project_id, :budget_usd, :period, :action, 0.0, :period_start, :created_at)
+        RETURNING *
+    """)
+
+    result = await session.execute(query, {
+        "id": budget_id,
+        "org_id": org_id,
+        "project_id": project_id,
+        "budget_usd": budget_usd,
+        "period": period,
+        "action": action,
+        "period_start": now,
+        "created_at": now,
+    })
+    await session.commit()
+    return dict(result.fetchone()._mapping)
+
+
+async def get_budget_configs(
+    session: AsyncSession,
+    org_id: str | None = None,
+) -> list[dict]:
+    """Fetch all budget configs, optionally filtered by org_id."""
+    if org_id:
+        query = text("""
+            SELECT * FROM budget_configs
+            WHERE org_id = :org_id
+            ORDER BY created_at DESC
+        """)
+        result = await session.execute(query, {"org_id": org_id})
+    else:
+        query = text("SELECT * FROM budget_configs ORDER BY created_at DESC")
+        result = await session.execute(query)
+
+    return [dict(row._mapping) for row in result.fetchall()]
+
+
+async def get_budget_by_id(
+    session: AsyncSession,
+    budget_id: str,
+) -> dict | None:
+    """Fetch a single budget config by primary key. Returns None if not found."""
+    query = text("SELECT * FROM budget_configs WHERE id = :id")
+    result = await session.execute(query, {"id": budget_id})
+    row = result.fetchone()
+    return dict(row._mapping) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Benchmark config (singleton row in benchmark_config table)
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Routing policies & decisions
+# ---------------------------------------------------------------------------
+
+
+async def get_active_routing_policy(session: AsyncSession) -> dict | None:
+    """Fetch the currently active routing policy. Returns None if none exists."""
+    query = text("""
+        SELECT id, policy_json, version, is_active, created_at
+        FROM routing_policies
+        WHERE is_active = TRUE
+        LIMIT 1
+    """)
+    result = await session.execute(query)
+    row = result.fetchone()
+    return dict(row._mapping) if row else None
+
+
+async def upsert_routing_policy(
+    session: AsyncSession,
+    policy_json: dict,
+    version: int,
+) -> dict:
+    """Insert a new active policy, deactivating any previously active one.
+
+    Uses a transaction to ensure exactly one active policy at a time.
+    Returns the newly created row.
+    """
+    now = utcnow()
+    policy_id = str(uuid.uuid4())
+
+    # Deactivate the current active policy (if any)
+    await session.execute(
+        text("UPDATE routing_policies SET is_active = FALSE WHERE is_active = TRUE")
+    )
+
+    query = text("""
+        INSERT INTO routing_policies (id, policy_json, version, is_active, created_at)
+        VALUES (:id, :policy_json::jsonb, :version, TRUE, :created_at)
+        RETURNING *
+    """)
+    result = await session.execute(query, {
+        "id": policy_id,
+        "policy_json": json.dumps(policy_json),
+        "version": version,
+        "created_at": now,
+    })
+    await session.commit()
+    return dict(result.fetchone()._mapping)
+
+
+async def insert_routing_decisions(
+    session: AsyncSession,
+    decisions: list[dict],
+) -> None:
+    """Bulk-insert routing decisions. Used by the writer's fallback path.
+
+    For high-throughput the RoutingDecisionWriter uses asyncpg COPY directly;
+    this function exists for the individual-fallback retry path and tests.
+    """
+    if not decisions:
+        return
+
+    query = text("""
+        INSERT INTO routing_decisions
+            (id, created_at, task_type, requested_model, selected_model,
+             was_overridden, reason, policy_version, group_name)
+        VALUES
+            (:id, :created_at, :task_type, :requested_model, :selected_model,
+             :was_overridden, :reason, :policy_version, :group_name)
+    """)
+
+    now = utcnow()
+    for d in decisions:
+        await session.execute(query, {
+            "id": str(d.get("id", uuid.uuid4())),
+            "created_at": d.get("created_at", now),
+            "task_type": d.get("task_type"),
+            "requested_model": d["requested_model"],
+            "selected_model": d["selected_model"],
+            "was_overridden": d.get("was_overridden", False),
+            "reason": d.get("reason"),
+            "policy_version": d.get("policy_version"),
+            "group_name": d.get("group_name"),
+        })
+    await session.commit()
+
+
+async def get_routing_decisions(
+    session: AsyncSession,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    """Paginated routing decisions, most recent first.
+
+    Returns (rows, total_count) for the API pagination response.
+    Uses a window function to get the count in a single round-trip.
+    """
+    query = text("""
+        SELECT id, created_at, task_type, requested_model, selected_model,
+               was_overridden, reason, policy_version, group_name,
+               COUNT(*) OVER() AS _total_count
+        FROM routing_decisions
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    result = await session.execute(query, {"limit": limit, "offset": offset})
+    raw_rows = result.fetchall()
+
+    total_count = int(raw_rows[0]._mapping["_total_count"]) if raw_rows else 0
+    rows = [{k: v for k, v in row._mapping.items() if k != "_total_count"} for row in raw_rows]
+    return rows, total_count
+
+
+async def get_benchmark_config_from_db(session: AsyncSession) -> dict | None:
+    """Fetch the singleton benchmark config row. Returns None if not yet created."""
+    query = text("SELECT * FROM benchmark_config WHERE id = 'default'")
+    result = await session.execute(query)
+    row = result.fetchone()
+    return dict(row._mapping) if row else None
+
+
+async def upsert_benchmark_config(
+    session: AsyncSession,
+    *,
+    sample_rate: float | None = None,
+    benchmark_models: list[str] | None = None,
+    judge_model: str | None = None,
+    enabled_task_types: list[str] | None = None,
+) -> dict:
+    """Insert or update the singleton benchmark config row.
+
+    Only provided (non-None) fields are updated. Returns the full row after upsert.
+    """
+    query = text("""
+        INSERT INTO benchmark_config (id, sample_rate, benchmark_models, judge_model, enabled_task_types)
+        VALUES (
+            'default',
+            COALESCE(:sample_rate, 0.1),
+            COALESCE(:benchmark_models, ARRAY['claude-haiku-4-5-20251001']::text[]),
+            COALESCE(:judge_model, 'claude-haiku-4-5-20251001'),
+            COALESCE(:enabled_task_types, ARRAY[]::text[])
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            sample_rate = COALESCE(:sample_rate, benchmark_config.sample_rate),
+            benchmark_models = COALESCE(:benchmark_models, benchmark_config.benchmark_models),
+            judge_model = COALESCE(:judge_model, benchmark_config.judge_model),
+            enabled_task_types = COALESCE(:enabled_task_types, benchmark_config.enabled_task_types),
+            updated_at = :now
+        RETURNING *
+    """)
+    now = utcnow()
+    result = await session.execute(query, {
+        "sample_rate": sample_rate,
+        "benchmark_models": benchmark_models,
+        "judge_model": judge_model,
+        "enabled_task_types": enabled_task_types,
+        "now": now,
+    })
+    await session.commit()
+    row = result.fetchone()
+    return dict(row._mapping)

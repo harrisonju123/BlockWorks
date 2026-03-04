@@ -29,6 +29,9 @@ htmlcov/
 # Docker
 pgdata/
 
+# Corporate CA certs — environment-specific, not for shared repos
+zscaler-root-ca.pem
+
 # Dashboard
 dashboard/node_modules/
 dashboard/dist/
@@ -44,3 +47,4 @@ Thumbs.db
 contracts/out/
 contracts/cache/
 contracts/lib/
+contracts/deployments/local.json

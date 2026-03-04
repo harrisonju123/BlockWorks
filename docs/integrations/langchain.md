@@ -112,7 +112,7 @@ The metadata fields that AgentProof recognizes:
 
 ## Model Name Mapping
 
-Use the aliases defined in `litellm-config.yaml`:
+Use the aliases defined in `litellm-config.example.yaml`:
 
 | LangChain model param | LiteLLM alias | Routes to |
 |---|---|---|
@@ -140,7 +140,7 @@ curl -s http://localhost:8100/api/v1/events | jq '.total_count'
 agentproof stats
 
 # Dashboard
-open http://localhost:5173
+open http://localhost:8081
 ```
 
 ## Example: Chain with Output Parser
@@ -221,7 +221,7 @@ Set the `api_key` to the LiteLLM master key (`sk-local-dev-key`), not your real 
 
 **Model not found**
 
-The model name in `ChatOpenAI(model=...)` must match an alias in `litellm-config.yaml`. Check what's available:
+The model name in `ChatOpenAI(model=...)` must match an alias in `litellm-config.example.yaml`. Check what's available:
 
 ```bash
 curl -s http://localhost:4000/v1/models -H "Authorization: Bearer sk-local-dev-key" | jq '.data[].id'
@@ -239,4 +239,4 @@ curl -s http://localhost:4000/v1/models -H "Authorization: Bearer sk-local-dev-k
 
 **LangChain streaming not working**
 
-Streaming works through the proxy. If you hit issues, check that you're using `ChatOpenAI` (not `ChatAnthropic`) and that LiteLLM's `drop_params: true` is set in `litellm-config.yaml`.
+Streaming works through the proxy. If you hit issues, check that you're using `ChatOpenAI` (not `ChatAnthropic`) and that LiteLLM's `drop_params: true` is set in `litellm-config.example.yaml`.

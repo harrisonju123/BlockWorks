@@ -45,19 +45,24 @@ class AgentProofCallback(CustomLogger):
 
     def __init__(
         self,
-        db_url: str,
+        db_url: str | None = None,
         org_id: str | None = None,
-        enable_classification: bool = True,
-        mcp_tracing_enabled: bool = True,
-        batch_size: int = 50,
-        flush_interval_ms: int = 100,
+        enable_classification: bool | None = None,
+        mcp_tracing_enabled: bool | None = None,
+        batch_size: int | None = None,
+        flush_interval_ms: int | None = None,
     ) -> None:
-        self._db_url = db_url
-        self._org_id = org_id
-        self._enable_classification = enable_classification
-        self._mcp_tracing_enabled = mcp_tracing_enabled
-        self._batch_size = batch_size
-        self._flush_interval_s = flush_interval_ms / 1000.0
+        # When LiteLLM instantiates with no args, pull from config
+        from agentproof.config import get_config
+        cfg = get_config()
+
+        self._db_url = db_url or cfg.database_url
+        self._org_id = org_id or cfg.org_id
+        self._enable_classification = enable_classification if enable_classification is not None else cfg.pipeline_enable_classification
+        self._mcp_tracing_enabled = mcp_tracing_enabled if mcp_tracing_enabled is not None else cfg.mcp_tracing_enabled
+        self._batch_size = batch_size or cfg.pipeline_batch_size
+        flush_ms = flush_interval_ms or cfg.pipeline_flush_interval_ms
+        self._flush_interval_s = flush_ms / 1000.0
         self._queue: asyncio.Queue[LLMEvent] = asyncio.Queue(maxsize=10_000)
         self._writer: EventWriter | None = None
         self._writer_task: asyncio.Task | None = None

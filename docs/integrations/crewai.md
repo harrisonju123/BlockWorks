@@ -68,7 +68,7 @@ researcher = Agent(
     role="Senior Researcher",
     goal="Find and summarize key information about a topic",
     backstory="You are an experienced researcher with attention to detail.",
-    llm="claude-sonnet",     # matches the alias in litellm-config.yaml
+    llm="claude-sonnet",     # matches the alias in litellm-config.example.yaml
     verbose=True,
 )
 
@@ -136,7 +136,7 @@ After this run, check the dashboard — you'll see separate events for each agen
 
 ## Model Name Mapping
 
-Use the aliases from `litellm-config.yaml` in your agent's `llm` parameter:
+Use the aliases from `litellm-config.example.yaml` in your agent's `llm` parameter:
 
 | CrewAI `llm` param | LiteLLM alias | Routes to |
 |---|---|---|
@@ -160,7 +160,7 @@ curl -s http://localhost:8100/api/v1/events | jq '.total_count'
 agentproof stats
 
 # Dashboard
-open http://localhost:5173
+open http://localhost:8081
 ```
 
 A single CrewAI task typically generates 2-5+ LLM calls (planning, execution, validation), so expect more events than the number of tasks.
@@ -200,7 +200,7 @@ curl http://localhost:4000/health
 
 **Model not found / "model does not exist"**
 
-The model name in `Agent(llm=...)` must match an alias in `litellm-config.yaml`. CrewAI sometimes prefixes model names with a provider (e.g. `openai/gpt-4o`). If you see this, either add the prefixed name to `litellm-config.yaml` or use the bare alias.
+The model name in `Agent(llm=...)` must match an alias in `litellm-config.example.yaml`. CrewAI sometimes prefixes model names with a provider (e.g. `openai/gpt-4o`). If you see this, either add the prefixed name to `litellm-config.example.yaml` or use the bare alias.
 
 Check available models:
 

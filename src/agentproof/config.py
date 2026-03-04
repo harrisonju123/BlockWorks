@@ -29,10 +29,16 @@ class AgentProofConfig(BaseSettings):
     classifier_confidence_threshold: float = 0.7
     classifier_use_ml: bool = False
 
+    # Proxy — upstream for OpenAI-compatible traffic (/v1/chat/completions)
+    upstream_url: str = "http://localhost:4000"
+    # Proxy — upstream for Anthropic-native traffic (/v1/messages)
+    # When using `make claude`, this must point to the real Anthropic API.
+    anthropic_upstream_url: str = "https://api.anthropic.com"
+
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8100
-    api_cors_origins: list[str] = ["http://localhost:5173"]
+    api_cors_origins: list[str] = ["http://localhost:8081"]
 
     # Benchmarking
     benchmark_enabled: bool = False
@@ -62,6 +68,8 @@ class AgentProofConfig(BaseSettings):
     attestation_provider: str = "local"
     attestation_rpc_url: str | None = None
     attestation_contract_address: str | None = None
+    attestation_private_key: str = ""
+    attestation_deployments_path: str = "contracts/deployments/local.json"
 
     # Validators (Phase 3)
     validators_enabled: bool = False

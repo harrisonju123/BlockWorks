@@ -57,6 +57,10 @@ SELECT add_continuous_aggregate_policy('fitness_matrix',
     schedule_interval => INTERVAL '1 day');
 
 -- Compression: compress chunks older than 7 days
+ALTER TABLE benchmark_results SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'benchmark_model, task_type'
+);
 SELECT add_compression_policy('benchmark_results', INTERVAL '7 days');
 
 -- Retention: keep 180 days of benchmark history (long-term strategic value)

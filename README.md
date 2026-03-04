@@ -1,30 +1,52 @@
 # BlockWorks
 
-AI agent observability, benchmarking, and on-chain attestation platform. Sits as a transparent proxy between AI coding agents and LLM providers, capturing every request for cost analysis, waste detection, quality benchmarking, and cryptographic attestation.
-
-Built on [LiteLLM](https://github.com/BerriAI/litellm) as a custom callback — agents connect to the proxy with zero code changes.
+AI agent observability, benchmarking, and on-chain attestation platform. Two deployment modes: **transparent HTTP proxy** (recommended — zero config on your LLM provider) or **LiteLLM callback** (if you control the proxy host). Every LLM request is captured for cost analysis, waste detection, quality benchmarking, and cryptographic attestation.
 
 ## Architecture
 
+### Proxy Mode (recommended)
+
+AgentProof sits between your agent and the upstream LLM provider, capturing all traffic transparently.
+
 ```
-┌─────────────┐     ┌────────────┐     ┌──────────────┐
-│  AI Agents  │────▶│  LiteLLM   │────▶│ LLM Provider │
-│ (Claude,    │     │  Proxy     │     │ (Anthropic,  │
-│  GPT, etc.) │     │ :4000      │     │  OpenAI)     │
-└─────────────┘     └─────┬──────┘     └──────────────┘
-                          │ callback
-                    ┌─────▼──────┐
-                    │ BlockWorks │
-                    │ Pipeline   │
-                    │ (classify, │
-                    │  hash,     │
-                    │  write)    │
-                    └─────┬──────┘
-           ┌──────────────┼──────────────┐
-     ┌─────▼─────┐  ┌─────▼─────┐ ┌─────▼─────┐
-     │TimescaleDB│  │ Dashboard │ │ REST API  │
-     │ :5432     │  │ :5173     │ │ :8100     │
-     └───────────┘  └───────────┘ └───────────┘
+┌─────────────┐     ┌───────────────────┐     ┌───────────────┐     ┌──────────────┐
+│  AI Agents  │────▶│  AgentProof :8100  │────▶│  LLM Provider │────▶│   Model      │
+│ (Claude     │     │  (proxy + capture) │     │  (LiteLLM,    │     │              │
+│  Code, etc.)│     │                   │     │   OpenAI, etc)│     │              │
+└─────────────┘     └────────┬──────────┘     └───────────────┘     └──────────────┘
+                             │ async queue
+                       ┌─────▼──────┐
+                       │ EventWriter│
+                       └─────┬──────┘
+                  ┌──────────┼──────────┐
+            ┌─────▼─────┐  ┌─────▼─────┐
+            │TimescaleDB│  │ Dashboard  │
+            │ :5432     │  │ :8081      │
+            └───────────┘  └───────────┘
+```
+
+### Callback Mode (alternative)
+
+If you control the LiteLLM proxy host, install the callback directly.
+
+```
+┌─────────────┐     ┌──────────────────────┐     ┌──────────────┐
+│  AI Agents  │────▶│  Your LiteLLM Proxy  │────▶│ LLM Provider │
+│ (Claude,    │     │                      │     │ (Anthropic,  │
+│  GPT, etc.) │     │  + AgentProofCallback │     │  OpenAI)     │
+└─────────────┘     └──────────┬───────────┘     └──────────────┘
+                               │ async queue
+                         ┌─────▼──────┐
+                         │ EventWriter│
+                         │ (batch     │
+                         │  COPY)     │
+                         └─────┬──────┘
+                    ┌──────────┼──────────┐
+              ┌─────▼─────┐  ┌─────▼─────┐
+              │TimescaleDB│  │ Dashboard  │
+              │ :5432     │  │ :8081      │
+              └───────────┘  │ + API :8100│
+                             └───────────┘
 ```
 
 ## What It Does
@@ -54,51 +76,85 @@ Built on [LiteLLM](https://github.com/BerriAI/litellm) as a custom callback — 
 ### Prerequisites
 
 - Docker & Docker Compose
-- Python 3.12+
-- Node.js 20+ and pnpm
-- API keys for at least one provider (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`)
 
-### Setup
+### Option A: Proxy Mode (recommended)
+
+No access to your LLM proxy host required. Point your agents at AgentProof and set the upstream URL.
 
 ```bash
-# Clone and install
 git clone https://github.com/harrisonju123/BlockWorks.git
 cd BlockWorks
-pip install -e ".[dev]"
-cd dashboard && pnpm install && cd ..
 
-# Set your API keys
-export ANTHROPIC_API_KEY=sk-ant-...
-export OPENAI_API_KEY=sk-...
+# Set your upstream LLM provider
+export AGENTPROOF_UPSTREAM_URL=https://your-litellm-proxy.example.com
 
-# Start the stack (TimescaleDB + LiteLLM proxy + API server)
+# Start DB + API (with proxy) + Dashboard
 make dev
 
-# In another terminal, start the dashboard
-make dashboard
+# Open the dashboard
+open http://localhost:8081
+```
+
+Now point your agent at AgentProof:
+
+```bash
+# Claude Code
+ANTHROPIC_BASE_URL=http://localhost:8100 claude
+
+# Or use the make target
+make claude
+
+# Any OpenAI-compatible client
+export OPENAI_BASE_URL=http://localhost:8100/v1
+```
+
+Every LLM call is transparently proxied to your upstream provider and captured for analysis.
+
+### Option B: Callback Mode
+
+If you control the LiteLLM proxy host, install the callback directly:
+
+```yaml
+litellm_settings:
+  callbacks: ["agentproof.pipeline.callback.AgentProofCallback"]
+```
+
+```bash
+pip install agentproof
+export AGENTPROOF_DATABASE_URL=postgresql+asyncpg://agentproof:localdev@localhost:5432/agentproof
+```
+
+See `litellm-config.example.yaml` for a full reference config. Then start the stack:
+
+```bash
+make dev
+open http://localhost:8081
+```
+
+### Resetting
+
+To wipe the DB and start fresh (re-applies all schemas):
+
+```bash
+make reset
+```
+
+### Local development (optional)
+
+For testing the callback locally without an external proxy, `make dev-proxy` starts a local LiteLLM proxy on port 4000 with the callback pre-configured:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+make dev-proxy
 ```
 
 ### Services
 
 | Service | Port | Description |
 |---------|------|-------------|
-| LiteLLM Proxy | 4000 | Agents connect here instead of directly to providers |
 | API Server | 8100 | REST API for querying events, stats, waste scores |
-| Dashboard | 5173 | React UI with spend charts, traces, waste analysis |
+| Dashboard | 8081 | React UI with spend charts, traces, waste analysis |
 | TimescaleDB | 5432 | Time-series storage with continuous aggregates |
-
-### Point Your Agent at the Proxy
-
-Any LLM client that supports custom base URLs works. Set the base URL to `http://localhost:4000` and use `sk-local-dev-key` as the API key:
-
-```bash
-# Claude Code
-export ANTHROPIC_BASE_URL=http://localhost:4000
-
-# OpenAI-compatible clients
-export OPENAI_API_BASE=http://localhost:4000
-export OPENAI_API_KEY=sk-local-dev-key
-```
 
 ## Project Structure
 
@@ -183,8 +239,8 @@ make ci                # Full CI: lint + typecheck + test
 
 ## How the Pipeline Works
 
-1. Agent sends LLM request to the LiteLLM proxy (`localhost:4000`)
-2. LiteLLM forwards to the real provider and calls the BlockWorks callback
+1. Agent sends LLM request to your LiteLLM proxy (wherever it runs)
+2. LiteLLM forwards to the real provider and calls `AgentProofCallback`
 3. The callback (non-blocking, fire-and-forget):
    - Hashes prompt/completion content (SHA-256, never stores raw text)
    - Extracts keywords and classifies the task type
@@ -200,6 +256,7 @@ All config uses environment variables with the `AGENTPROOF_` prefix:
 
 ```bash
 AGENTPROOF_DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/agentproof
+AGENTPROOF_UPSTREAM_URL=http://localhost:4000    # upstream LLM provider for proxy mode
 AGENTPROOF_ENV=development
 AGENTPROOF_API_HOST=0.0.0.0
 AGENTPROOF_API_PORT=8100

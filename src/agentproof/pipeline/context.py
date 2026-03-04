@@ -8,7 +8,7 @@ import uuid
 from typing import Any
 
 
-_FRAMEWORK_HINTS = {
+FRAMEWORK_HINTS = {
     "langchain": ["langchain", "langsmith"],
     "crewai": ["crewai"],
     "claude-code": ["claude-code", "claude_code"],
@@ -53,7 +53,7 @@ def detect_agent_framework(kwargs: dict[str, Any]) -> tuple[str | None, str | No
     headers = _litellm_params(kwargs).get("headers", {})
     user_agent = headers.get("User-Agent", "").lower()
 
-    for framework, hints in _FRAMEWORK_HINTS.items():
+    for framework, hints in FRAMEWORK_HINTS.items():
         if any(hint in user_agent for hint in hints):
             return framework, metadata.get("agent_name")
 
@@ -61,7 +61,7 @@ def detect_agent_framework(kwargs: dict[str, Any]) -> tuple[str | None, str | No
     model_group = kwargs.get("model_group", "")
     if model_group:
         model_group_lower = model_group.lower()
-        for framework, hints in _FRAMEWORK_HINTS.items():
+        for framework, hints in FRAMEWORK_HINTS.items():
             if any(hint in model_group_lower for hint in hints):
                 return framework, metadata.get("agent_name")
 

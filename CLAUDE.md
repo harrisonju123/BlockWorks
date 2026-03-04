@@ -28,8 +28,12 @@ When running multiple tracks in parallel via background agents, each agent must 
 ### Environment Constraints
 
 - **Local-first**: Everything runs on localhost via Docker Compose. No cloud deployments, no external services, no auth, no multi-tenancy.
-- **Single `docker compose up`** should bring up the full stack: TimescaleDB, LiteLLM proxy, API server.
-- Dashboard runs via `pnpm dev` on localhost:5173, API on localhost:8100, LiteLLM proxy on localhost:4000, Postgres on localhost:5432.
+- **Single `docker compose up`** should bring up the full stack: TimescaleDB, API server (with proxy), Dashboard.
+- **Two capture modes**: (1) Transparent HTTP proxy on :8100 — forwards to upstream via `AGENTPROOF_UPSTREAM_URL`, captures traffic at HTTP level. (2) LiteLLM callback — installed directly on the proxy host. Proxy mode is primary; callback is the alternative.
+- Port 8100 serves both `/v1/*` (proxy routes) and `/api/v1/*` (dashboard API). No route conflicts.
+- Dashboard on localhost:8081, API+Proxy on localhost:8100, Postgres on localhost:5432.
+- `make claude` launches Claude Code pointed at the proxy (`ANTHROPIC_BASE_URL=http://localhost:8100`).
+- `make dev-proxy` optionally starts a local LiteLLM proxy on :4000 for testing the callback without an external proxy.
 
 ### Architecture Decisions
 
