@@ -138,6 +138,22 @@ async def lifespan(app: FastAPI):
     else:
         fitness_refresh_task = None
 
+    # -- Attestation scheduler --------------------------------------------------
+    attestation_scheduler_task = None
+    if cfg.attestation_scheduler_enabled:
+        from agentproof.api.routes.attestation import _get_provider
+        from agentproof.attestation.scheduler import run_attestation_scheduler
+
+        attestation_scheduler_task = asyncio.create_task(
+            run_attestation_scheduler(
+                _get_provider(), cfg.attestation_scheduler_interval_s
+            )
+        )
+        logger.info(
+            "Attestation scheduler enabled (interval=%ds)",
+            cfg.attestation_scheduler_interval_s,
+        )
+
     # -- Benchmarking ----------------------------------------------------------
     benchmark_worker_task = None
     if cfg.benchmark_enabled:
@@ -161,6 +177,13 @@ async def lifespan(app: FastAPI):
 
     # Shutdown — stop workers BEFORE closing httpx clients, since the
     # benchmark worker replays prompts against upstream during drain.
+    if attestation_scheduler_task:
+        attestation_scheduler_task.cancel()
+        try:
+            await attestation_scheduler_task
+        except asyncio.CancelledError:
+            pass
+
     if fitness_refresh_task:
         fitness_refresh_task.cancel()
         try:

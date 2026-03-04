@@ -245,6 +245,8 @@ class AgentProofCallback(CustomLogger):
         # Token counts
         prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+        cache_read_tokens = getattr(usage, "cache_read_input_tokens", 0) or 0
+        cache_creation_tokens = getattr(usage, "cache_creation_input_tokens", 0) or 0
 
         # Cost from LiteLLM's calculator
         estimated_cost = kwargs.get("response_cost", 0.0) or 0.0
@@ -348,6 +350,8 @@ class AgentProofCallback(CustomLogger):
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=prompt_tokens + completion_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             estimated_cost=estimated_cost,
             latency_ms=latency_ms,
             prompt_hash=prompt_hash,

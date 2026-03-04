@@ -1,4 +1,4 @@
-.PHONY: dev dev-proxy down reset logs db-shell test test-unit test-integration lint fmt typecheck ci install claude forge-test deploy-local
+.PHONY: dev dev-proxy down reset logs db-shell test test-unit test-integration lint fmt typecheck ci install claude claude-proxy forge-test deploy-local
 
 # Start full stack (DB + API + Dashboard)
 dev:
@@ -54,8 +54,12 @@ typecheck:
 # Full CI check
 ci: lint typecheck test
 
-# Launch Claude Code through the AgentProof proxy
+# Launch Claude Code through AgentProof → Anthropic (use with `make dev`)
 claude:
+	ANTHROPIC_BASE_URL=http://localhost:8100 claude
+
+# Launch Claude Code through AgentProof → LiteLLM (use with `make dev-proxy`)
+claude-proxy:
 	ANTHROPIC_BASE_URL=http://localhost:8100 claude
 
 # Run Foundry contract tests

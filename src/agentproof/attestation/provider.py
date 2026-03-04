@@ -47,3 +47,7 @@ class AttestationProvider(ABC):
     @abstractmethod
     async def get_latest_nonce(self, org_id_hash: str) -> int:
         """Get the nonce of the latest attestation (0 if none exist)."""
+
+    @abstractmethod
+    async def get_org_hashes(self) -> list[str]:
+        """Return all org hashes that have at least one attestation."""

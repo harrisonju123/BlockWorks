@@ -98,6 +98,14 @@ class TestTypeConversions:
         t = _make_contract_tuple(nonce=0)
         assert _tuple_to_record(t) is None
 
+    def test_hex_to_bytes32_strips_0x_prefix(self) -> None:
+        result = _hex_to_bytes32("0x" + "aa" * 32)
+        assert result == bytes.fromhex("aa" * 32)
+
+    def test_tuple_to_record_wrong_length(self) -> None:
+        with pytest.raises(AttestationError, match="Expected 9-element tuple"):
+            _tuple_to_record((b"\x00" * 32,))
+
     def test_record_to_contract_tuple(self) -> None:
         record = make_record()
         args = _record_to_contract_tuple(record)
@@ -125,12 +133,13 @@ def _make_mock_provider():
     mock_w3 = MagicMock()
     mock_w3.eth = MagicMock()
     mock_w3.eth.get_transaction_count = AsyncMock(return_value=0)
-    # web3 async gas_price is an async property returning a coroutine;
-    # each mock instance is used for a single _send_tx call so this is safe.
+    # web3 async gas_price is a property returning a coroutine.
+    # Use a property that creates a fresh coroutine each access so multiple
+    # _send_tx calls on the same mock don't hit "already awaited" errors.
     async def _gas():
         return 1_000_000_000
 
-    mock_w3.eth.gas_price = _gas()
+    type(mock_w3.eth).gas_price = property(lambda self: _gas())
     mock_w3.eth.send_raw_transaction = AsyncMock(return_value=b"\x01" * 32)
     mock_w3.eth.wait_for_transaction_receipt = AsyncMock(
         return_value={"status": 1, "transactionHash": b"\x01" * 32}

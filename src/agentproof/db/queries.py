@@ -639,6 +639,28 @@ async def get_trace_tool_patterns(
     return [dict(row._mapping) for row in result.fetchall()]
 
 
+async def get_distinct_org_ids(session: AsyncSession) -> list[str]:
+    """Return all distinct org_id values from llm_events."""
+    query = text("SELECT DISTINCT org_id FROM llm_events WHERE org_id IS NOT NULL")
+    result = await session.execute(query)
+    return [row[0] for row in result.fetchall()]
+
+
+async def get_earliest_event_time(
+    session: AsyncSession,
+    org_id: str | None = None,
+) -> datetime | None:
+    """Return the earliest event timestamp, optionally scoped to an org."""
+    if org_id:
+        query = text("SELECT MIN(created_at) FROM llm_events WHERE org_id = :org_id")
+        result = await session.execute(query, {"org_id": org_id})
+    else:
+        query = text("SELECT MIN(created_at) FROM llm_events")
+        result = await session.execute(query)
+    val = result.scalar()
+    return val
+
+
 async def get_attestation_metrics(
     session: AsyncSession,
     org_id: str,

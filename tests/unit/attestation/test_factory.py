@@ -47,6 +47,15 @@ class TestCreateProvider:
             create_provider(
                 provider_type="evm",
                 rpc_url="https://rpc.example.com",
+                private_key="0xbeef",
+            )
+
+    def test_evm_type_missing_private_key_raises(self) -> None:
+        with pytest.raises(ValueError, match="attestation_private_key"):
+            create_provider(
+                provider_type="evm",
+                rpc_url="https://rpc.example.com",
+                contract_address="0x1234",
             )
 
     def test_unknown_provider_type_raises(self) -> None:

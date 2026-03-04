@@ -140,29 +140,22 @@ function DriftDetection({ timeRange }: { timeRange: TimeRange }) {
 
   return (
     <CardShell title="Quality Drift" loading={isLoading} error={error ?? null} skeletonHeight="h-48">
-      {data?.drifted.length === 0 && data?.stable.length === 0 && (
+      {data && data.drifts.length === 0 && (
         <p className="text-xs text-gray-500 py-4 text-center">No drift data available</p>
       )}
-      {data && data.drifted.length > 0 && (
-        <div className="flex flex-col gap-1 mb-3">
-          <span className="text-[10px] text-red-400 uppercase font-medium">Degraded</span>
-          {data.drifted.map((d) => (
+      {data && data.drifts.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] text-gray-500 uppercase font-medium mb-1">
+            {data.drifts_found} degraded / {data.models_checked} checked
+          </span>
+          {data.drifts.map((d) => (
             <div key={`${d.model}-${d.task_type}`} className="flex items-center gap-2 px-2 py-1.5 bg-red-500/5 rounded">
               <span className="text-xs font-mono text-gray-200">{d.model}</span>
               <span className="text-[10px] text-gray-500">{d.task_type}</span>
-              <span className="ml-auto text-xs font-mono text-red-400">{d.drift_pct.toFixed(1)}%</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {data && data.stable.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <span className="text-[10px] text-green-400 uppercase font-medium">Stable</span>
-          {data.stable.slice(0, 5).map((d) => (
-            <div key={`${d.model}-${d.task_type}`} className="flex items-center gap-2 px-2 py-1.5 bg-gray-800/30 rounded">
-              <span className="text-xs font-mono text-gray-200">{d.model}</span>
-              <span className="text-[10px] text-gray-500">{d.task_type}</span>
-              <span className="ml-auto text-xs font-mono text-green-400">{d.drift_pct.toFixed(1)}%</span>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs font-mono text-red-400">{d.delta_pct.toFixed(1)}%</span>
+                <span className="text-[10px] text-gray-600">p={d.p_value.toFixed(3)}</span>
+              </div>
             </div>
           ))}
         </div>

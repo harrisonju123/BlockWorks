@@ -13,6 +13,7 @@ import pytest
 
 from agentproof.benchmarking.mirror import (
     BenchmarkWorker,
+    _replay_prompt,
     run_benchmark_for_event,
     should_sample,
 )
@@ -100,6 +101,21 @@ class TestShouldSample:
         sampled_count = sum(1 for _ in range(1000) if should_sample(event, config))
         # Allow wide margin for randomness, but it should be in the right ballpark
         assert 350 < sampled_count < 650, f"Expected ~500, got {sampled_count}"
+
+    def test_anthropic_format_messages_are_sampled(self) -> None:
+        """Anthropic-native content-block messages should now be accepted."""
+        config = BenchmarkConfig(sample_rate=1.0)
+        event = _make_event()
+        anthropic_messages = [
+            {"role": "user", "content": [{"type": "text", "text": "hello"}]},
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "tc_1", "name": "run", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tc_1", "content": "ok"},
+            ]},
+        ]
+        assert should_sample(event, config, messages=anthropic_messages) is True
 
 
 class TestRunBenchmarkForEvent:
@@ -237,3 +253,48 @@ class TestBenchmarkConfig:
         assert config.sample_rate == 0.1
         assert config.benchmark_models == ["gpt-4o"]
         assert config.enabled_task_types == [TaskType.CODE_GENERATION]
+
+
+class TestReplayPromptConversion:
+
+    @pytest.mark.asyncio
+    async def test_converts_anthropic_format_before_calling_litellm(self) -> None:
+        """_replay_prompt should convert Anthropic content-block messages to OpenAI format."""
+        anthropic_messages = [
+            {"role": "user", "content": [{"type": "text", "text": "hello"}]},
+        ]
+        system_prompt = "You are a helper"
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "hi"
+        mock_response._hidden_params = {"response_cost": 0.001}
+
+        with patch("agentproof.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_acomp:
+            mock_acomp.return_value = mock_response
+            await _replay_prompt(anthropic_messages, "test-model", system_prompt=system_prompt)
+
+            # Verify litellm received OpenAI-format messages with system prepended
+            called_messages = mock_acomp.call_args.kwargs["messages"]
+            assert called_messages[0] == {"role": "system", "content": "You are a helper"}
+            assert called_messages[1] == {"role": "user", "content": "hello"}
+
+    @pytest.mark.asyncio
+    async def test_openai_format_passes_through(self) -> None:
+        """Plain OpenAI-format messages should pass through unchanged."""
+        openai_messages = [
+            {"role": "system", "content": "You are helpful"},
+            {"role": "user", "content": "hi"},
+        ]
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "hello"
+        mock_response._hidden_params = {"response_cost": 0.001}
+
+        with patch("agentproof.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_acomp:
+            mock_acomp.return_value = mock_response
+            await _replay_prompt(openai_messages, "test-model")
+
+            called_messages = mock_acomp.call_args.kwargs["messages"]
+            assert called_messages == openai_messages

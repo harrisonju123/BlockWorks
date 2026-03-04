@@ -70,6 +70,8 @@ class AgentProofConfig(BaseSettings):
     attestation_contract_address: str | None = None
     attestation_private_key: str = ""
     attestation_deployments_path: str = "contracts/deployments/local.json"
+    attestation_scheduler_enabled: bool = True
+    attestation_scheduler_interval_s: int = 3600
 
     # Validators (Phase 3)
     validators_enabled: bool = False

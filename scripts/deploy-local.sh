@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eu
 
 ANVIL_URL="${ANVIL_URL:-http://anvil:8545}"
 DEPLOYER_PRIVATE_KEY="${DEPLOYER_PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
@@ -8,9 +8,7 @@ MAX_RETRIES=30
 
 echo "Waiting for Anvil at $ANVIL_URL..."
 for i in $(seq 1 $MAX_RETRIES); do
-    if curl -sf -X POST "$ANVIL_URL" \
-        -H "Content-Type: application/json" \
-        -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' > /dev/null 2>&1; then
+    if cast bn --rpc-url "$ANVIL_URL" > /dev/null 2>&1; then
         echo "Anvil is ready (attempt $i)"
         break
     fi
@@ -26,15 +24,14 @@ cd /app/contracts
 # Ensure forge-std is available
 if [ ! -d "lib/forge-std" ]; then
     echo "Installing forge-std..."
-    forge install foundry-rs/forge-std --no-commit
+    forge install foundry-rs/forge-std --no-git
 fi
 
 echo "Deploying contracts..."
 DEPLOY_OUTPUT=$(DEPLOYER_PRIVATE_KEY="$DEPLOYER_PRIVATE_KEY" \
     forge script script/Deploy.s.sol \
     --rpc-url "$ANVIL_URL" \
-    --broadcast \
-    --silent 2>&1) || {
+    --broadcast 2>&1) || {
     echo "Forge script failed:"
     echo "$DEPLOY_OUTPUT"
     exit 1
@@ -44,7 +41,13 @@ echo "$DEPLOY_OUTPUT"
 
 # Parse addresses from forge console.log output
 parse_address() {
-    echo "$DEPLOY_OUTPUT" | grep "$1:" | awk '{print $NF}'
+    local addr
+    addr=$(echo "$DEPLOY_OUTPUT" | grep "$1:" | awk '{print $NF}')
+    if ! echo "$addr" | grep -qE '^0x[0-9a-fA-F]{40}$'; then
+        echo "ERROR: Invalid address for $1: '$addr'" >&2
+        exit 1
+    fi
+    echo "$addr"
 }
 
 TOKEN=$(parse_address "AgentProofToken")
@@ -55,6 +58,7 @@ TRUST=$(parse_address "AgentProofTrust")
 REVENUE=$(parse_address "AgentProofRevenue")
 
 # Write deployment addresses to JSON
+mkdir -p "$(dirname "$OUTPUT_FILE")"
 cat > "$OUTPUT_FILE" <<EOF
 {
   "chain_id": 31337,

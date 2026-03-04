@@ -23,6 +23,7 @@ import type {
   AttestationRecord,
   AttestationSubmitResponse,
   VerifyChainResponse,
+  AttestationOrgsResponse,
 } from "./types";
 
 const API_BASE = "/api/v1";
@@ -258,4 +259,8 @@ export async function submitAttestation(
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export async function getAttestationOrgs(): Promise<AttestationOrgsResponse> {
+  return fetchJson(`${API_BASE}/attestations/orgs`);
 }

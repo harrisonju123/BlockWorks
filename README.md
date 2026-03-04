@@ -6,23 +6,24 @@ AI agent observability, benchmarking, and on-chain attestation platform. Two dep
 
 ### Proxy Mode (recommended)
 
-AgentProof sits between your agent and the upstream LLM provider, capturing all traffic transparently.
+AgentProof sits between your agent and the upstream LLM provider, capturing all traffic transparently. An embedded Anvil node provides on-chain attestation.
 
 ```
-┌─────────────┐     ┌───────────────────┐     ┌───────────────┐     ┌──────────────┐
-│  AI Agents  │────▶│  AgentProof :8100  │────▶│  LLM Provider │────▶│   Model      │
-│ (Claude     │     │  (proxy + capture) │     │  (LiteLLM,    │     │              │
-│  Code, etc.)│     │                   │     │   OpenAI, etc)│     │              │
-└─────────────┘     └────────┬──────────┘     └───────────────┘     └──────────────┘
-                             │ async queue
-                       ┌─────▼──────┐
-                       │ EventWriter│
-                       └─────┬──────┘
-                  ┌──────────┼──────────┐
-            ┌─────▼─────┐  ┌─────▼─────┐
-            │TimescaleDB│  │ Dashboard  │
-            │ :5432     │  │ :8081      │
-            └───────────┘  └───────────┘
+┌─────────────┐     ┌───────────────────┐     ┌───────────────┐
+│  AI Agents  │────▶│  AgentProof :8100  │────▶│  LLM Provider │
+│ (Claude     │     │  (proxy + capture  │     │  (Anthropic,  │
+│  Code, etc.)│     │   + smart routing) │     │   OpenAI, etc)│
+└─────────────┘     └──┬─────────┬──────┘     └───────────────┘
+                       │         │ async queues
+                 ┌─────▼───┐  ┌──▼──────────┐
+                 │ Event   │  │ Benchmark   │
+                 │ Writer  │  │ Worker      │
+                 └─────┬───┘  └──┬──────────┘
+            ┌──────────┼─────────┘
+      ┌─────▼─────┐  ┌─────▼─────┐  ┌──────────┐
+      │TimescaleDB│  │ Dashboard  │  │  Anvil   │
+      │ :5432     │  │ :8081      │  │  :8545   │
+      └───────────┘  └───────────┘  └──────────┘
 ```
 
 ### Callback Mode (alternative)
@@ -152,9 +153,10 @@ make dev-proxy
 
 | Service | Port | Description |
 |---------|------|-------------|
-| API Server | 8100 | REST API for querying events, stats, waste scores |
-| Dashboard | 8081 | React UI with spend charts, traces, waste analysis |
+| API Server | 8100 | REST API (`/api/v1/*`) + transparent proxy (`/v1/*`) |
+| Dashboard | 8081 | React UI — spend, traces, waste, routing, benchmarks, attestations |
 | TimescaleDB | 5432 | Time-series storage with continuous aggregates |
+| Anvil | 8545 | Local EVM node for on-chain attestation (auto-deployed contracts) |
 
 ## Project Structure
 
@@ -162,14 +164,15 @@ make dev-proxy
 src/agentproof/
   pipeline/         # LiteLLM callback, async event writer, base worker class
   classifier/       # Rules-based task classification (code gen, summarization, etc.)
-  api/              # FastAPI REST endpoints (60+)
+  db/               # Shared query helpers (events, stats, aggregates)
+  api/              # FastAPI REST endpoints (~100 across 20 route modules)
   cli/              # Typer CLI (stats, waste-report, evaluate)
   benchmarking/     # Traffic mirroring, LLM-as-judge, model comparison
   mcp/              # MCP server call tracing and execution DAGs
   alerts/           # Anomaly detection, budget caps, Slack/email dispatch
   waste/            # Waste scoring — model overkill, context bloat detection
   routing/          # YAML policy DSL, fitness-based model selection, A/B testing
-  attestation/      # Merkle trees, keccak256 hashing, on-chain proof submission
+  attestation/      # Merkle trees, EVM provider, scheduled on-chain proof submission
   billing/          # Invoice parsing, cost reconciliation, attestation-backed billing
   compliance/       # Audit trail export, framework mapping (SOC2, ISO 27001)
   channels/         # State channels for batched high-frequency attestations
@@ -201,7 +204,7 @@ dashboard/          # React 19 + Vite 6 + Tailwind 4 + Recharts
 
 ## API
 
-The API server exposes 60+ endpoints under `/api/v1/`. Key groups:
+The API server exposes ~100 endpoints under `/api/v1/`. Key groups:
 
 ```
 GET  /api/v1/stats/summary          # Spend, latency, call counts over time
@@ -212,7 +215,9 @@ GET  /api/v1/mcp/stats              # MCP server health and latency
 GET  /api/v1/mcp/graph/{trace_id}   # Execution DAG for a trace
 POST /api/v1/alerts/rules           # Create alert rules
 GET  /api/v1/routing/policy         # Current routing policy
-POST /api/v1/attestation/submit     # Submit attestation batch
+POST /api/v1/attestation/submit     # Submit attestation batch on-chain
+GET  /api/v1/attestation/latest     # Most recent attestation + chain integrity
+GET  /api/v1/attestation/verify     # Verify a specific attestation hash
 GET  /api/v1/fitness/index          # Global model fitness rankings
 GET  /api/v1/registry/agents        # Registered agent catalog
 ```
@@ -229,26 +234,37 @@ agentproof evaluate           # Run classifier accuracy eval
 ## Testing
 
 ```bash
-make test-unit         # 1382 unit tests (~3s)
+make test-unit         # ~1460 unit tests (~3s)
 make test-integration  # Integration tests with real TimescaleDB (testcontainers)
 make test              # All tests with coverage
 make lint              # Ruff linting
 make typecheck         # mypy strict mode
 make ci                # Full CI: lint + typecheck + test
+make forge-test        # Solidity contract tests (Foundry)
+make deploy-local      # Deploy contracts to local Anvil
 ```
 
 ## How the Pipeline Works
 
-1. Agent sends LLM request to your LiteLLM proxy (wherever it runs)
-2. LiteLLM forwards to the real provider and calls `AgentProofCallback`
-3. The callback (non-blocking, fire-and-forget):
+### Proxy mode
+
+1. Agent sends LLM request to AgentProof `:8100/v1/*`
+2. The proxy forwards to the upstream provider via `AGENTPROOF_UPSTREAM_URL`
+3. On response, the proxy (non-blocking):
    - Hashes prompt/completion content (SHA-256, never stores raw text)
-   - Extracts keywords and classifies the task type
+   - Classifies the task type via rules-based classifier
+   - Evaluates the smart routing policy (fitness scores, budget, A/B rules)
    - Detects MCP server calls from tool_use blocks
    - Queues an `LLMEvent` to the `EventWriter`
-4. `EventWriter` batches events and flushes to TimescaleDB via `COPY` for throughput
-5. TimescaleDB continuous aggregates pre-compute hourly and daily rollups
-6. Dashboard and API read from aggregates for fast queries
+   - Optionally samples traffic to `BenchmarkWorker` for cross-model comparison
+4. `EventWriter` batches events and flushes to TimescaleDB via `COPY`
+5. `AttestationScheduler` periodically builds Merkle trees and submits on-chain proofs
+6. TimescaleDB continuous aggregates pre-compute hourly and daily rollups
+7. Dashboard and API read from aggregates for fast queries
+
+### Callback mode
+
+Same pipeline, but the `AgentProofCallback` is installed directly on a LiteLLM proxy host instead of using the transparent proxy.
 
 ## Configuration
 
@@ -262,6 +278,8 @@ AGENTPROOF_API_HOST=0.0.0.0
 AGENTPROOF_API_PORT=8100
 AGENTPROOF_BENCHMARK_SAMPLE_RATE=0.1
 AGENTPROOF_ALERT_CHECK_INTERVAL_S=60
+AGENTPROOF_ATTESTATION_RPC_URL=http://localhost:8545  # Anvil / EVM RPC for attestations
+AGENTPROOF_ATTESTATION_INTERVAL_S=300                 # Merkle tree submission frequency
 ```
 
 ## License

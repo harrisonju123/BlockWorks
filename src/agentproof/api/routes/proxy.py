@@ -118,6 +118,7 @@ def _enqueue(
     request: Request | None = None,
     messages: list[dict] | None = None,
     completion: str = "",
+    system_prompt: str | list | None = None,
 ) -> None:
     """Enqueue event for persistence, and optionally for benchmark sampling."""
     try:
@@ -132,7 +133,7 @@ def _enqueue(
         if bench_queue is not None and bench_config is not None:
             if should_sample(event, bench_config, messages=messages):
                 try:
-                    bench_queue.put_nowait((event, messages, completion))
+                    bench_queue.put_nowait((event, messages, completion, system_prompt))
                 except asyncio.QueueFull:
                     logger.warning("Benchmark queue full — skipping event %s", event.id)
 
@@ -536,7 +537,7 @@ async def _handle_non_streaming(
         error_message_hash=error_message_hash,
     )
     queue: asyncio.Queue[LLMEvent] = request.app.state.event_queue
-    _enqueue(queue, event, request=request, messages=body.get("messages", []), completion=completion_content)
+    _enqueue(queue, event, request=request, messages=body.get("messages", []), completion=completion_content, system_prompt=None)
 
     return JSONResponse(content=data, status_code=status_code)
 
@@ -632,7 +633,7 @@ async def _handle_streaming(
                 error_message_hash=err_hash,
             )
             queue: asyncio.Queue[LLMEvent] = request.app.state.event_queue
-            _enqueue(queue, event, request=request, messages=body.get("messages", []), completion=acc.full_content)
+            _enqueue(queue, event, request=request, messages=body.get("messages", []), completion=acc.full_content, system_prompt=None)
 
     return StreamingResponse(
         _generate(),
@@ -773,6 +774,8 @@ async def _handle_messages_non_streaming(
             cache_read_tokens=cache_read_tokens,
             cache_creation_tokens=cache_creation_tokens,
         ),
+        cache_read_tokens=cache_read_tokens,
+        cache_creation_tokens=cache_creation_tokens,
         latency_ms=latency_ms,
         prompt_hash=hash_content(body.get("messages", [])),
         completion_hash=hash_content(completion_content),
@@ -789,7 +792,7 @@ async def _handle_messages_non_streaming(
         error_message_hash=error_message_hash,
     )
     queue: asyncio.Queue[LLMEvent] = request.app.state.event_queue
-    _enqueue(queue, event, request=request, messages=body.get("messages", []), completion=completion_content)
+    _enqueue(queue, event, request=request, messages=body.get("messages", []), completion=completion_content, system_prompt=body.get("system"))
 
     return JSONResponse(content=data, status_code=status_code)
 
@@ -858,6 +861,8 @@ async def _handle_messages_streaming(
                     cache_read_tokens=acc.cache_read_tokens,
                     cache_creation_tokens=acc.cache_creation_tokens,
                 ),
+                cache_read_tokens=acc.cache_read_tokens,
+                cache_creation_tokens=acc.cache_creation_tokens,
                 latency_ms=latency_ms,
                 time_to_first_token_ms=acc.ttft_ms,
                 prompt_hash=hash_content(body.get("messages", [])),
@@ -875,7 +880,7 @@ async def _handle_messages_streaming(
                 error_message_hash=hash_content(str(stream_error)) if stream_error else None,
             )
             queue: asyncio.Queue[LLMEvent] = request.app.state.event_queue
-            _enqueue(queue, event, request=request, messages=body.get("messages", []), completion=acc.full_content)
+            _enqueue(queue, event, request=request, messages=body.get("messages", []), completion=acc.full_content, system_prompt=body.get("system"))
 
     return StreamingResponse(
         _generate(),

@@ -127,6 +127,9 @@ class LocalProvider(AttestationProvider):
     async def get_latest_nonce(self, org_id_hash: str) -> int:
         return self._latest_nonce.get(org_id_hash, 0)
 
+    async def get_org_hashes(self) -> list[str]:
+        return list(self._store.keys())
+
     def _validate_chain_linkage(self, record: AttestationRecord) -> None:
         """Ensure prev_hash matches the hash of the previous attestation.
 

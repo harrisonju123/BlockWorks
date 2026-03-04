@@ -3,6 +3,7 @@ import {
   getLatestAttestation,
   verifyChain,
   submitAttestation,
+  getAttestationOrgs,
 } from "../api/client";
 
 export function useLatestAttestation(orgIdHash: string) {
@@ -11,6 +12,7 @@ export function useLatestAttestation(orgIdHash: string) {
     queryFn: () => getLatestAttestation(orgIdHash),
     enabled: !!orgIdHash,
     retry: false,
+    staleTime: 60_000,
   });
 }
 
@@ -20,6 +22,14 @@ export function useVerifyChain(orgIdHash: string) {
     queryFn: () => verifyChain(orgIdHash),
     enabled: !!orgIdHash,
     staleTime: 60_000,
+  });
+}
+
+export function useAttestationOrgs() {
+  return useQuery({
+    queryKey: ["attestation-orgs"],
+    queryFn: () => getAttestationOrgs(),
+    staleTime: 30_000,
   });
 }
 

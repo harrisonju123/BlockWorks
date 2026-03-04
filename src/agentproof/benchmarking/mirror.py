@@ -17,6 +17,7 @@ import uuid
 import asyncpg
 import litellm
 
+from agentproof.benchmarking.convert import convert_anthropic_to_openai, is_anthropic_format
 from agentproof.benchmarking.judge import evaluate
 from agentproof.benchmarking.types import BenchmarkConfig, BenchmarkResult
 from agentproof.utils import utcnow
@@ -43,21 +44,6 @@ _BENCH_COLUMNS = [
 ]
 
 
-def _has_anthropic_content(messages: list[dict]) -> bool:
-    """Check if messages use Anthropic-native format (tool_result blocks).
-
-    LiteLLM's acompletion() only accepts OpenAI-format messages. Anthropic uses
-    content arrays with type=tool_result in user messages, which must be skipped.
-    """
-    for msg in messages:
-        content = msg.get("content")
-        if isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "tool_result":
-                    return True
-    return False
-
-
 def should_sample(
     event: LLMEvent,
     config: BenchmarkConfig,
@@ -70,7 +56,6 @@ def should_sample(
     2. The event's task_type is in the enabled list
     3. The event was successful (no point benchmarking failures)
     4. The event has a task_type (UNKNOWN is excluded)
-    5. The messages are in OpenAI format (not Anthropic-native)
     """
     if config.sample_rate <= 0.0:
         return False
@@ -84,10 +69,6 @@ def should_sample(
     if event.task_type not in config.enabled_task_types:
         return False
 
-    # Skip Anthropic-native messages — LiteLLM can't replay them
-    if messages and _has_anthropic_content(messages):
-        return False
-
     # sample_rate of 1.0 means always benchmark
     if config.sample_rate >= 1.0:
         return True
@@ -98,15 +79,30 @@ def should_sample(
 async def _replay_prompt(
     messages: list[dict],
     model: str,
+    system_prompt: str | list | None = None,
 ) -> tuple[str, float, float]:
     """Send the original messages to a benchmark model.
 
+    Converts Anthropic-format messages to OpenAI format before calling litellm.
     Returns (completion_text, cost_usd, latency_ms).
     """
+    replay_messages = messages
+    if is_anthropic_format(messages):
+        replay_messages = convert_anthropic_to_openai(messages, system=system_prompt)
+    elif system_prompt:
+        # OpenAI-format but system_prompt passed separately (shouldn't happen,
+        # but handle gracefully by prepending)
+        sys_text = system_prompt if isinstance(system_prompt, str) else " ".join(
+            b.get("text", "") for b in system_prompt
+            if isinstance(b, dict) and b.get("type") == "text"
+        )
+        if sys_text:
+            replay_messages = [{"role": "system", "content": sys_text}] + messages
+
     start = time.monotonic()
     response = await litellm.acompletion(
         model=model,
-        messages=messages,
+        messages=replay_messages,
         temperature=0.0,
     )
     elapsed_ms = (time.monotonic() - start) * 1000.0
@@ -122,6 +118,7 @@ async def run_benchmark_for_event(
     messages: list[dict],
     original_completion: str,
     config: BenchmarkConfig,
+    system_prompt: str | list | None = None,
 ) -> list[BenchmarkResult]:
     """Benchmark a single event against all configured models.
 
@@ -138,7 +135,7 @@ async def run_benchmark_for_event(
     async def _benchmark_single_model(model: str) -> BenchmarkResult | None:
         try:
             bench_completion, bench_cost, bench_latency = await _replay_prompt(
-                messages, model
+                messages, model, system_prompt=system_prompt
             )
             quality_score, rubric_version = await evaluate(
                 original_prompt=prompt_text,
@@ -177,8 +174,8 @@ async def run_benchmark_for_event(
     return [r for r in completed if r is not None]
 
 
-# Queue item type: (event, messages, original_completion)
-_BenchmarkItem = tuple[LLMEvent, list[dict], str]
+# Queue item type: (event, messages, original_completion, system_prompt)
+_BenchmarkItem = tuple[LLMEvent, list[dict], str, str | list | None]
 
 
 class BenchmarkWorker(AsyncQueueWorker[_BenchmarkItem]):
@@ -192,7 +189,7 @@ class BenchmarkWorker(AsyncQueueWorker[_BenchmarkItem]):
     def __init__(
         self,
         db_url: str,
-        queue: asyncio.Queue[tuple[LLMEvent, list[dict], str]],
+        queue: asyncio.Queue[_BenchmarkItem],
         config: BenchmarkConfig,
     ) -> None:
         super().__init__(
@@ -233,10 +230,11 @@ class BenchmarkWorker(AsyncQueueWorker[_BenchmarkItem]):
                 except asyncio.TimeoutError:
                     continue
 
-                event, messages, original_completion = item
+                event, messages, original_completion, system_prompt = item
                 try:
                     results = await run_benchmark_for_event(
-                        event, messages, original_completion, self._config
+                        event, messages, original_completion, self._config,
+                        system_prompt=system_prompt,
                     )
                     if results:
                         await self._write_results(pool, results)
@@ -250,9 +248,10 @@ class BenchmarkWorker(AsyncQueueWorker[_BenchmarkItem]):
         while not self._queue.empty():
             try:
                 item = self._queue.get_nowait()
-                event, messages, original_completion = item
+                event, messages, original_completion, system_prompt = item
                 results = await run_benchmark_for_event(
-                    event, messages, original_completion, self._config
+                    event, messages, original_completion, self._config,
+                    system_prompt=system_prompt,
                 )
                 if results:
                     await self._write_results(pool, results)

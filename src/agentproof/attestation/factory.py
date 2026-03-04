@@ -71,7 +71,9 @@ def create_provider(provider_type: str | None = None, **kwargs: object) -> Attes
                 "EVM provider requires attestation_contract_address or a valid deployments file"
             )
 
-        private_key = kwargs.get("private_key") or config.attestation_private_key or ""
+        private_key = kwargs.get("private_key") or config.attestation_private_key
+        if not private_key:
+            raise ValueError("EVM provider requires attestation_private_key")
         return EVMProvider(
             rpc_url=str(rpc_url),
             contract_address=str(contract_address),

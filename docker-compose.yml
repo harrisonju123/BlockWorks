@@ -1,11 +1,11 @@
 services:
   anvil:
     image: ghcr.io/foundry-rs/foundry:latest
-    entrypoint: ["anvil", "--host", "0.0.0.0", "--port", "8545", "--block-time", "1"]
+    entrypoint: ["anvil", "--host", "0.0.0.0", "--port", "8545", "--block-time", "1", "--silent"]
     ports:
       - "8545:8545"
     healthcheck:
-      test: ["CMD", "curl", "-sf", "-X", "POST", "http://localhost:8545", "-H", "Content-Type: application/json", "-d", "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}"]
+      test: ["CMD", "cast", "bn", "--rpc-url", "http://localhost:8545"]
       interval: 3s
       timeout: 3s
       retries: 10
@@ -15,6 +15,7 @@ services:
     volumes:
       - ./contracts:/app/contracts
       - ./scripts:/app/scripts
+      - ./contracts/.solc-cache/solc-0.8.24:/home/foundry/.svm/0.8.24/solc-0.8.24:ro
     entrypoint: ["sh", "/app/scripts/deploy-local.sh"]
     environment:
       ANVIL_URL: http://anvil:8545
@@ -40,6 +41,7 @@ services:
       - ./src/agentproof/pipeline/schema_benchmarks.sql:/docker-entrypoint-initdb.d/04-schema_benchmarks.sql
       - ./src/agentproof/pipeline/schema_benchmark_config.sql:/docker-entrypoint-initdb.d/05-schema_benchmark_config.sql
       - ./src/agentproof/pipeline/schema_routing.sql:/docker-entrypoint-initdb.d/06-schema_routing.sql
+      - ./src/agentproof/pipeline/schema_cache_tokens.sql:/docker-entrypoint-initdb.d/07-schema_cache_tokens.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentproof"]
       interval: 5s
@@ -77,8 +79,8 @@ services:
     environment:
       AGENTPROOF_DATABASE_URL: postgresql+asyncpg://agentproof:localdev@db:5432/agentproof
       AGENTPROOF_UPSTREAM_URL: ${AGENTPROOF_UPSTREAM_URL:-http://litellm:4000}
-      AGENTPROOF_ANTHROPIC_UPSTREAM_URL: ${AGENTPROOF_ANTHROPIC_UPSTREAM_URL:-https://api.anthropic.com}
-      ANTHROPIC_API_KEY: ${LITELLM_API_KEY:-}
+      AGENTPROOF_ANTHROPIC_UPSTREAM_URL: https://api.anthropic.com
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AGENTPROOF_ENV: development
       AGENTPROOF_ROUTING_ENABLED: "true"
       AGENTPROOF_BENCHMARK_ENABLED: "true"
@@ -89,8 +91,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      deploy:
-        condition: service_completed_successfully
     command: ["uvicorn", "agentproof.api.app:app", "--host", "0.0.0.0", "--port", "8100", "--reload"]
 
   dashboard:

@@ -93,11 +93,14 @@ _ATTESTATION_ABI = [
 
 # Anvil single-attest is ~60k gas; 500k accommodates batchAttest with ~6 records.
 _DEFAULT_GAS_LIMIT = 500_000
+_MAX_BATCH_SIZE = 10
+_TX_TIMEOUT_SECONDS = 30
 
 
 def _hex_to_bytes32(hex_str: str) -> bytes:
-    """Convert a 64-char hex string to 32-byte value."""
-    raw = bytes.fromhex(hex_str)
+    """Convert a 64-char hex string (with or without 0x prefix) to 32-byte value."""
+    clean = hex_str.removeprefix("0x").removeprefix("0X")
+    raw = bytes.fromhex(clean)
     if len(raw) != 32:
         raise AttestationError(f"Expected 32 bytes, got {len(raw)} from '{hex_str[:16]}...'")
     return raw
@@ -110,7 +113,10 @@ def _bytes32_to_hex(b: bytes) -> str:
 
 def _dt_to_uint40(dt: datetime) -> int:
     """Convert datetime to uint40 unix timestamp."""
-    return int(dt.timestamp())
+    ts = int(dt.timestamp())
+    if ts < 0 or ts >= 2**40:
+        raise AttestationError(f"Timestamp {ts} out of uint40 range")
+    return ts
 
 
 def _uint40_to_dt(ts: int) -> datetime:
@@ -124,6 +130,9 @@ def _tuple_to_record(t: tuple) -> AttestationRecord | None:
     Returns None if the tuple represents a zero-initialized struct
     (nonce == 0 means "not found" in the contract).
     """
+    if len(t) != 9:
+        raise AttestationError(f"Expected 9-element tuple from contract, got {len(t)}")
+
     nonce = t[7]
     if nonce == 0:
         return None
@@ -169,40 +178,68 @@ class EVMProvider(AttestationProvider):
         self._w3 = None
         self._contract = None
         self._account = None
+        self._init_lock = asyncio.Lock()
+        self._tx_lock = asyncio.Lock()
 
-    async def _ensure_connected(self):
+    async def _ensure_connected(self) -> None:
         """Lazy-initialize the web3 connection and contract instance."""
         if self._w3 is not None:
             return
 
-        from web3 import AsyncWeb3
-        from web3.providers import AsyncHTTPProvider
+        async with self._init_lock:
+            if self._w3 is not None:
+                return
 
-        self._w3 = AsyncWeb3(AsyncHTTPProvider(self._rpc_url))
-        self._account = self._w3.eth.account.from_key(self._private_key)
-        self._contract = self._w3.eth.contract(
-            address=self._w3.to_checksum_address(self._contract_address),
-            abi=_ATTESTATION_ABI,
-        )
+            try:
+                from web3 import AsyncWeb3
+                from web3.providers import AsyncHTTPProvider
+
+                w3 = AsyncWeb3(AsyncHTTPProvider(self._rpc_url))
+                account = w3.eth.account.from_key(self._private_key)
+                contract = w3.eth.contract(
+                    address=w3.to_checksum_address(self._contract_address),
+                    abi=_ATTESTATION_ABI,
+                )
+                self._w3 = w3
+                self._account = account
+                self._contract = contract
+            except Exception as exc:
+                raise AttestationError(f"Failed to connect to EVM node: {exc}") from exc
+
+    def _require_connected(self) -> None:
+        if self._w3 is None or self._contract is None or self._account is None:
+            raise AttestationError("Provider not connected; call _ensure_connected first")
 
     async def _send_tx(self, fn) -> str:
         """Build, sign, send a transaction and wait for receipt."""
         await self._ensure_connected()
-        assert self._w3 is not None and self._account is not None
+        self._require_connected()
 
-        nonce, gas_price = await asyncio.gather(
-            self._w3.eth.get_transaction_count(self._account.address),
-            self._w3.eth.gas_price,
-        )
-        tx = await fn.build_transaction({
-            "from": self._account.address,
-            "nonce": nonce,
-            "gas": _DEFAULT_GAS_LIMIT,
-            "gasPrice": gas_price,
-        })
-        signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
-        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash)
+        try:
+            async with self._tx_lock:
+                nonce, gas_price = await asyncio.gather(
+                    self._w3.eth.get_transaction_count(self._account.address),
+                    self._w3.eth.gas_price,
+                )
+                tx = await fn.build_transaction({
+                    "from": self._account.address,
+                    "nonce": nonce,
+                    "gas": _DEFAULT_GAS_LIMIT,
+                    "gasPrice": gas_price,
+                })
+                signed = self._account.sign_transaction(tx)
+                tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+
+            receipt = await asyncio.wait_for(
+                self._w3.eth.wait_for_transaction_receipt(tx_hash),
+                timeout=_TX_TIMEOUT_SECONDS,
+            )
+        except AttestationError:
+            raise
+        except asyncio.TimeoutError as exc:
+            raise AttestationError("Transaction confirmation timed out") from exc
+        except Exception as exc:
+            raise AttestationError(f"Transaction failed: {exc}") from exc
 
         if receipt["status"] != 1:
             raise AttestationError(
@@ -213,7 +250,7 @@ class EVMProvider(AttestationProvider):
 
     async def submit(self, record: AttestationRecord) -> str:
         await self._ensure_connected()
-        assert self._contract is not None
+        self._require_connected()
 
         fn = self._contract.functions.attest(*_record_to_contract_tuple(record))
         return await self._send_tx(fn)
@@ -222,8 +259,13 @@ class EVMProvider(AttestationProvider):
         if not records:
             return []
 
+        if len(records) > _MAX_BATCH_SIZE:
+            raise AttestationError(
+                f"Batch size {len(records)} exceeds max {_MAX_BATCH_SIZE}"
+            )
+
         await self._ensure_connected()
-        assert self._contract is not None
+        self._require_connected()
 
         tuples = [_record_to_contract_tuple(r) for r in records]
         fn = self._contract.functions.batchAttest(tuples)
@@ -238,7 +280,7 @@ class EVMProvider(AttestationProvider):
     ) -> AttestationRecord | None:
         """Walk nonces backward to find a record matching the period."""
         await self._ensure_connected()
-        assert self._contract is not None
+        self._require_connected()
 
         latest_nonce = await self.get_latest_nonce(org_id_hash)
         if latest_nonce == 0:
@@ -268,7 +310,7 @@ class EVMProvider(AttestationProvider):
 
     async def get_latest(self, org_id_hash: str) -> AttestationRecord | None:
         await self._ensure_connected()
-        assert self._contract is not None
+        self._require_connected()
 
         org_bytes = _hex_to_bytes32(org_id_hash)
         result = await self._contract.functions.getLatest(org_bytes).call()
@@ -276,7 +318,11 @@ class EVMProvider(AttestationProvider):
 
     async def get_latest_nonce(self, org_id_hash: str) -> int:
         await self._ensure_connected()
-        assert self._contract is not None
+        self._require_connected()
 
         org_bytes = _hex_to_bytes32(org_id_hash)
         return await self._contract.functions.latestNonce(org_bytes).call()
+
+    async def get_org_hashes(self) -> list[str]:
+        # EVM contract doesn't expose an org enumeration function yet
+        return []

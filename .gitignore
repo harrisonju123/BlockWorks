@@ -47,4 +47,5 @@ Thumbs.db
 contracts/out/
 contracts/cache/
 contracts/lib/
+contracts/.solc-cache/
 contracts/deployments/local.json

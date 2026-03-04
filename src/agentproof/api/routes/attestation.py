@@ -166,28 +166,11 @@ async def verify_chain_integrity(org_id_hash: str) -> VerifyResponse:
 
     first_broken: int | None = None
     records_checked = 0
-
-    for nonce in range(1, latest_nonce + 1):
-        record = await provider.verify(
-            org_id_hash,
-            # Pass dummy datetimes — verify walks by nonce, not period.
-            # The provider's verify method finds by period, so we need to
-            # use get_latest_nonce + individual lookups instead.
-            datetime.min.replace(tzinfo=timezone.utc),
-            datetime.max.replace(tzinfo=timezone.utc),
-        )
-        records_checked += 1
-
-        # For a proper chain walk, we need access to individual records.
-        # With the current provider interface, we verify the latest is
-        # retrievable. A full nonce-by-nonce walk requires the provider's
-        # internal store, which LocalProvider exposes.
-
-    # For LocalProvider, do a full chain walk using the store directly
-    from agentproof.attestation.local_provider import LocalProvider
-
     chain_valid = True
-    records_checked = 0
+
+    # LocalProvider exposes its internal store for a full chain walk.
+    # For EVM, we trust the contract's nonce sequencing (enforced on-chain).
+    from agentproof.attestation.local_provider import LocalProvider
 
     if isinstance(provider, LocalProvider):
         for nonce in range(1, latest_nonce + 1):
@@ -255,6 +238,18 @@ async def batch_submit(body: BatchSubmitRequest) -> BatchSubmitResponse:
         raise HTTPException(status_code=422, detail=str(e))
 
     return BatchSubmitResponse(tx_ids=tx_ids, count=len(tx_ids))
+
+
+class OrgsResponse(BaseModel):
+    org_hashes: list[str]
+
+
+@router.get("/orgs", response_model=OrgsResponse)
+async def get_attestation_orgs() -> OrgsResponse:
+    """Return org hashes that have at least one attestation."""
+    provider = _get_provider()
+    org_hashes = await provider.get_org_hashes()
+    return OrgsResponse(org_hashes=org_hashes)
 
 
 def reset_provider() -> None:

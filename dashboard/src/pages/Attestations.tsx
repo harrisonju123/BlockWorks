@@ -1,5 +1,5 @@
 import type { TimeRange } from "../hooks/useStats";
-import { useLatestAttestation, useVerifyChain } from "../hooks/useAttestations";
+import { useLatestAttestation, useVerifyChain, useAttestationOrgs } from "../hooks/useAttestations";
 import { CardShell } from "../components/common/CardShell";
 import { truncateHash } from "../utils/format";
 
@@ -7,19 +7,41 @@ interface Props {
   timeRange: TimeRange;
 }
 
-const DEFAULT_ORG_HASH = "aa".repeat(32);
-
 export function Attestations({ timeRange: _timeRange }: Props) {
-  const orgHash = DEFAULT_ORG_HASH;
+  const { data: orgsData, isLoading: orgsLoading } = useAttestationOrgs();
+  const orgHashes = orgsData?.org_hashes ?? [];
+  const orgHash = orgHashes[0] ?? null;
 
   return (
     <div className="flex flex-col gap-6 max-w-[1600px] mx-auto">
-      <h1 className="text-lg font-semibold">Attestations</h1>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <LatestAttestationCard orgHash={orgHash} />
-        <ChainIntegrityCard orgHash={orgHash} />
+      <div className="flex items-center gap-3">
+        <h1 className="text-lg font-semibold">Attestations</h1>
+        {orgHashes.length > 1 && (
+          <span className="text-[10px] text-gray-500">
+            {orgHashes.length} orgs
+          </span>
+        )}
       </div>
+
+      {orgsLoading ? (
+        <div className="text-xs text-gray-500">Loading...</div>
+      ) : !orgHash ? (
+        <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+          <svg className="w-10 h-10 mb-2 text-gray-700" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 1L3 4v4.5c0 3.5 2.5 5.5 5 6.5 2.5-1 5-3 5-6.5V4L8 1z" />
+            <path d="M6 8h4M8 6v4" />
+          </svg>
+          <p className="text-xs">Waiting for first attestation</p>
+          <p className="text-[10px] text-gray-600 mt-1">
+            The scheduler will generate attestations automatically once LLM events are captured
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <LatestAttestationCard orgHash={orgHash} />
+          <ChainIntegrityCard orgHash={orgHash} />
+        </div>
+      )}
     </div>
   );
 }
@@ -33,14 +55,7 @@ function LatestAttestationCard({ orgHash }: { orgHash: string }) {
     <CardShell title="Latest Attestation" loading={isLoading} error={is404 ? null : (error ?? null)} skeletonHeight="h-48">
       {is404 && (
         <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-          <svg className="w-10 h-10 mb-2 text-gray-700" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 1L3 4v4.5c0 3.5 2.5 5.5 5 6.5 2.5-1 5-3 5-6.5V4L8 1z" />
-            <path d="M6 8h4M8 6v4" />
-          </svg>
           <p className="text-xs">No attestations submitted yet</p>
-          <p className="text-[10px] text-gray-600 mt-1">
-            POST to /api/v1/attestations/submit to create one
-          </p>
         </div>
       )}
       {data && (

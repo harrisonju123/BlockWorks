@@ -206,15 +206,20 @@ export interface BenchmarkConfigUpdate {
 export interface DriftEntry {
   model: string;
   task_type: string;
-  current_quality: number;
   baseline_quality: number;
-  drift_pct: number;
-  sample_size: number;
+  current_quality: number;
+  delta_pct: number;
+  p_value: number;
+  confidence_interval: [number, number];
+  baseline_sample_size: number;
+  current_sample_size: number;
+  first_detected_at: string;
 }
 
 export interface DriftResponse {
-  drifted: DriftEntry[];
-  stable: DriftEntry[];
+  drifts: DriftEntry[];
+  models_checked: number;
+  drifts_found: number;
 }
 
 // -- Routing types ------------------------------------------------------------
@@ -342,4 +347,8 @@ export interface VerifyChainResponse {
   latest_nonce: number;
   records_checked: number;
   first_broken_nonce: number | null;
+}
+
+export interface AttestationOrgsResponse {
+  org_hashes: string[];
 }
