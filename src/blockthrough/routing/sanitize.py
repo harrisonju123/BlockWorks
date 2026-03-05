@@ -77,12 +77,12 @@ def sanitize_for_target(
     target_provider = infer_provider(target_model)
 
     if source_provider == target_provider:
-        # Intra-Anthropic: strip thinking for models that don't support it (e.g. haiku)
+        # Intra-Anthropic: strip thinking/effort for models that don't support it (e.g. haiku)
         if source_provider == "anthropic":
             target_info = MODEL_CATALOG.get(target_model)
             if target_info and not target_info.supports_thinking:
                 body.pop("thinking", None)
-                body.pop("effort", None)
+                _strip_effort(body)
         return
 
     source_spec = PROVIDER_SPECS.get(source_provider)
@@ -307,6 +307,33 @@ def _split_mixed_tool_result_messages(body: dict) -> None:
 
     if changed:
         body["messages"] = new_messages
+
+
+def strip_unsupported_params(body: dict, model: str, *, upstream_is_litellm: bool = False) -> None:
+    """Strip effort/thinking from body if the target can't handle them.
+
+    When ``upstream_is_litellm`` is True, always strip effort because the
+    remote LiteLLM may re-route to a model that doesn't support it (e.g. Haiku)
+    and LiteLLM won't clean it up itself.
+    """
+    info = MODEL_CATALOG.get(model)
+
+    if upstream_is_litellm:
+        _strip_effort(body)
+
+    if info and not info.supports_thinking:
+        body.pop("thinking", None)
+        _strip_effort(body)
+
+
+def _strip_effort(body: dict) -> None:
+    """Remove effort from body — handles both top-level and output_config.effort."""
+    body.pop("effort", None)  # legacy/future top-level
+    output_config = body.get("output_config")
+    if isinstance(output_config, dict):
+        output_config.pop("effort", None)
+        if not output_config:
+            body.pop("output_config")
 
 
 def _strip_content_block_types(

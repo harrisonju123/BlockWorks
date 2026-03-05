@@ -27,8 +27,8 @@ class BlockThroughConfig(BaseSettings):
     mcp_tracing_enabled: bool = True
 
     # Classifier
-    classifier_confidence_threshold: float = 0.7
-    classifier_use_ml: bool = False
+    classifier_confidence_threshold: float = 0.4
+    classifier_use_ml: bool = True
     classifier_model: str = "google.gemma-3-27b-it"
     classifier_llm_timeout_s: float = 2.0
 

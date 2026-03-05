@@ -6,7 +6,7 @@ import copy
 
 import pytest
 
-from blockthrough.routing.sanitize import repair_tool_pairing, sanitize_for_target
+from blockthrough.routing.sanitize import repair_tool_pairing, sanitize_for_target, strip_unsupported_params
 
 
 class TestSanitizeForTarget:
@@ -35,17 +35,29 @@ class TestSanitizeForTarget:
         assert body["messages"] == [{"role": "user", "content": "hi"}]
 
     def test_strips_effort_for_haiku_target(self):
-        """Haiku doesn't support effort — strip when routing opus→haiku."""
+        """Haiku doesn't support effort — strip output_config.effort when routing opus→haiku."""
         body = {
             "model": "claude-haiku-4-5-20251001",
             "thinking": {"type": "adaptive"},
-            "effort": {"level": "low"},
+            "output_config": {"effort": "low"},
             "messages": [{"role": "user", "content": "hi"}],
         }
         sanitize_for_target(body, source_model="claude-opus-4-6", target_model="claude-haiku-4-5-20251001")
         assert "thinking" not in body
-        assert "effort" not in body
+        assert "output_config" not in body
         assert body["messages"] == [{"role": "user", "content": "hi"}]
+
+    def test_strips_effort_preserves_other_output_config(self):
+        """When output_config has effort + other fields, only effort is removed."""
+        body = {
+            "model": "claude-haiku-4-5-20251001",
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": "low", "format": "json"},
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        sanitize_for_target(body, source_model="claude-opus-4-6", target_model="claude-haiku-4-5-20251001")
+        assert "thinking" not in body
+        assert body["output_config"] == {"format": "json"}
 
     def test_strips_anthropic_params_for_openai_target(self):
         body = {
@@ -316,6 +328,73 @@ class TestAnthropicToolPairingRepair:
         }
         sanitize_for_target(body, source_model="claude-opus-4-6", target_model="gpt-5.2-chat-latest")
         assert body["messages"][0]["content"] == ""
+
+
+class TestStripUnsupportedParams:
+    """strip_unsupported_params strips effort/thinking for models that don't support them."""
+
+    def test_strips_for_haiku(self):
+        body = {
+            "model": "claude-haiku-4-5-20251001",
+            "output_config": {"effort": "low"},
+            "thinking": {"type": "adaptive"},
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        strip_unsupported_params(body, "claude-haiku-4-5-20251001")
+        assert "output_config" not in body
+        assert "thinking" not in body
+        assert body["messages"] == [{"role": "user", "content": "hi"}]
+
+    def test_noop_for_opus_direct(self):
+        """Opus direct to Anthropic keeps effort and thinking."""
+        body = {
+            "model": "claude-opus-4-6",
+            "output_config": {"effort": "high"},
+            "thinking": {"type": "enabled", "budget_tokens": 10000},
+        }
+        strip_unsupported_params(body, "claude-opus-4-6")
+        assert body["output_config"] == {"effort": "high"}
+        assert "thinking" in body
+
+    def test_strips_effort_for_opus_via_litellm(self):
+        """Opus through LiteLLM: strip effort (LiteLLM may re-route to haiku)."""
+        body = {
+            "model": "claude-opus-4-6",
+            "output_config": {"effort": "high"},
+            "thinking": {"type": "enabled", "budget_tokens": 10000},
+        }
+        strip_unsupported_params(body, "claude-opus-4-6", upstream_is_litellm=True)
+        assert "output_config" not in body
+        # thinking is kept — opus supports it and LiteLLM doesn't break on it
+        assert "thinking" in body
+
+    def test_strips_effort_for_sonnet_via_litellm(self):
+        body = {"model": "claude-sonnet-4-6", "output_config": {"effort": "low"}}
+        strip_unsupported_params(body, "claude-sonnet-4-6", upstream_is_litellm=True)
+        assert "output_config" not in body
+
+    def test_noop_for_unknown_model(self):
+        body = {"model": "unknown-model", "output_config": {"effort": "low"}}
+        strip_unsupported_params(body, "unknown-model")
+        assert body["output_config"] == {"effort": "low"}
+
+    def test_preserves_output_config_format_when_stripping_effort(self):
+        """output_config with effort + format: only effort removed."""
+        body = {
+            "model": "claude-haiku-4-5-20251001",
+            "output_config": {"effort": "low", "format": "json"},
+        }
+        strip_unsupported_params(body, "claude-haiku-4-5-20251001")
+        assert body["output_config"] == {"format": "json"}
+
+    def test_strips_legacy_toplevel_effort(self):
+        """Legacy/future top-level effort is also stripped."""
+        body = {
+            "model": "claude-haiku-4-5-20251001",
+            "effort": "low",
+        }
+        strip_unsupported_params(body, "claude-haiku-4-5-20251001")
+        assert "effort" not in body
 
 
 class TestRepairToolPairingStandalone:

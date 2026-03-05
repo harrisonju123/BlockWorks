@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from datetime import datetime
@@ -228,7 +229,7 @@ async def _maybe_route(
         return model, None, (None, None, None)
 
     # Pre-classify to get task_type (token counts unknown yet, pass 0)
-    task_type, confidence, sys_hash = await classify_fn(body, 0, 0)
+    task_type, confidence, sys_hash = await classify_fn(request, body, 0, 0)
     if task_type is None:
         return model, None, (task_type, confidence, sys_hash)
 
@@ -297,6 +298,7 @@ async def _maybe_route(
 
 
 async def _classify_request(
+    request: Request,
     body: dict,
     prompt_tokens: int,
     completion_tokens: int,
@@ -314,6 +316,7 @@ async def _classify_request(
     output_format_hint: str | None = None
 
     user_kw_set: set[str] = set()
+    last_user_message: str | None = None
 
     for msg in messages:
         if not isinstance(msg, dict):
@@ -334,6 +337,7 @@ async def _classify_request(
                     output_format_hint = "code"
         elif role == "user" and isinstance(content, str):
             user_kw_set.update(extract_keywords(content))
+            last_user_message = content
 
     tools = body.get("tools") or body.get("functions") or []
     token_ratio = compute_token_ratio(prompt_tokens, completion_tokens)
@@ -360,14 +364,21 @@ async def _classify_request(
         user_prompt_keywords=list(user_kw_set),
         has_tool_calls=has_tool_calls,
         output_format_hint=output_format_hint,
+        last_user_message=last_user_message,
     )
     config = get_config()
     if config.classifier_use_ml:
         try:
+            _classifier_api_key = (
+                os.environ.get("ANTHROPIC_API_KEY")
+                or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            )
             result = await llm_classify(
                 inp,
                 model=config.classifier_model,
                 timeout_s=config.classifier_llm_timeout_s,
+                client=request.app.state.http_client,
+                api_key=_classifier_api_key,
             )
             return result.task_type, result.confidence, system_prompt_hash
         except Exception as exc:
@@ -584,6 +595,7 @@ class _AnthropicStreamAccumulator:
 
 
 async def _classify_anthropic_request(
+    request: Request,
     body: dict,
     prompt_tokens: int,
     completion_tokens: int,
@@ -607,7 +619,7 @@ async def _classify_anthropic_request(
         "tools": body.get("tools", []),
         "model": body.get("model", "unknown"),
     }
-    return await _classify_request(compat, prompt_tokens, completion_tokens)
+    return await _classify_request(request, compat, prompt_tokens, completion_tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -710,7 +722,7 @@ async def _handle_non_streaming(
         break  # first choice only
 
     # Classify + get system_prompt_hash in one pass
-    task_type, task_confidence, sys_hash = await _classify_request(body, prompt_tokens, completion_tokens)
+    task_type, task_confidence, sys_hash = await _classify_request(request, body, prompt_tokens, completion_tokens)
 
     # Error info
     error_type = None
@@ -808,7 +820,7 @@ async def _handle_streaming(
             tool_calls = acc.tool_call_records
 
             task_type, task_confidence, sys_hash = await _classify_request(
-                body, prompt_tokens, completion_tokens,
+                request, body, prompt_tokens, completion_tokens,
             )
 
             status = EventStatus.FAILURE if stream_error else EventStatus.SUCCESS
@@ -996,7 +1008,7 @@ async def _handle_messages_non_streaming(
             ))
 
     task_type, task_confidence, sys_hash = await _classify_anthropic_request(
-        body, prompt_tokens, completion_tokens,
+        request, body, prompt_tokens, completion_tokens,
     )
 
     error_type = None
@@ -1089,7 +1101,7 @@ async def _handle_messages_streaming(
             tool_calls = acc.tool_call_records
 
             task_type, task_confidence, sys_hash = await _classify_anthropic_request(
-                body, acc.prompt_tokens, acc.completion_tokens,
+                request, body, acc.prompt_tokens, acc.completion_tokens,
             )
 
             status = EventStatus.FAILURE if stream_error else EventStatus.SUCCESS
@@ -1199,7 +1211,7 @@ async def _handle_messages_via_openai(
         break
 
     task_type, task_confidence, sys_hash = await _classify_anthropic_request(
-        anthropic_body, prompt_tokens, completion_tokens,
+        request, anthropic_body, prompt_tokens, completion_tokens,
     )
 
     error_type = None
@@ -1326,7 +1338,7 @@ async def _handle_messages_via_openai_streaming(
             latency_ms = (time.monotonic() - mono_start) * 1000
             resolved_model = acc.model or model
             task_type, task_confidence, sys_hash = await _classify_anthropic_request(
-                anthropic_body, acc.prompt_tokens, acc.completion_tokens,
+                request, anthropic_body, acc.prompt_tokens, acc.completion_tokens,
             )
 
             status = EventStatus.FAILURE if stream_error else EventStatus.SUCCESS

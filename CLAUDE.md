@@ -119,6 +119,8 @@ Base class provides: pool management (`_ensure_pool`, `_close_pool`), `shutdown(
 - Lazy initialization via `@lru_cache` on `get_config()` — avoids import-time side effects
 - DB engine and session factory also lazy via `@lru_cache`
 - Tests that need different config must call `get_config.cache_clear()`
+- **Two upstream URLs** — `config.upstream_url` is the OpenAI-compatible LiteLLM proxy (routes all models); `config.anthropic_upstream_url` is Anthropic-native only.
+- **Internal LLM calls must use httpx, not litellm** — The proxy forwards all traffic via `request.app.state.http_client` (httpx pointed at `config.upstream_url`). Internal features (classifier, benchmarking) that call LLM models must use the same httpx client + POST to `/v1/chat/completions`. Do NOT use `litellm.acompletion()` — its client-side provider routing misroutes prefixed model names like `google.*`.
 
 ### Types and Enums
 
@@ -137,9 +139,12 @@ Base class provides: pool management (`_ensure_pool`, `_close_pool`), `shutdown(
 ### Classifier
 
 - Rules-based classifier in `classifier/rules.py` — 86.6% accuracy on 82-example eval set
+- LLM classifier in `classifier/llm_classifier.py` — uses Gemma via httpx to upstream LiteLLM proxy
 - `extract_keywords()` and `compute_token_ratio()` are shared utilities — use them, don't reimplement
 - `TASK_KEYWORDS` dict is public (not underscore-prefixed) — the single source of keyword signals
 - Classifier runs on the callback hot path — must stay sub-millisecond
+- **LLM classifier uses raw user message**: `_build_prompt()` sends the last user message (truncated to 500 chars) directly to Gemma. Previous approach of extracting structural signals was too lossy — system prompt keywords from Claude Code's CLAUDE.md content polluted classification. Never send extracted keyword lists to the LLM classifier; just give it the user's actual request.
+- **Confidence threshold**: `classifier_confidence_threshold` (default 0.4) gates routing — quality floors in the routing policy are the real safety net, so the confidence gate only needs to filter truly garbage classifications (UNKNOWN exits before the gate anyway)
 
 ### Waste Scoring
 

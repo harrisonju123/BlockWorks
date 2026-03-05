@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-import litellm
+import httpx
 
 from blockthrough.classifier.taxonomy import ClassificationResult, ClassifierInput
 from blockthrough.types import TaskType
@@ -19,58 +19,33 @@ logger = logging.getLogger(__name__)
 _VALID_TYPES = {t.value for t in TaskType if t != TaskType.UNKNOWN}
 
 _SYSTEM_PROMPT = (
-    "You are a task classifier. Given structural signals from an LLM request, "
-    "classify it into exactly one category.\n\n"
-    "Categories: code_generation, code_review, classification, summarization, "
-    "extraction, reasoning, conversation, tool_selection\n\n"
-    "Respond with ONLY the category name, nothing else."
+    "Given structural signals from an LLM request, determine the primary "
+    "task the user is asking the model to perform.\n\n"
+    "Possible task types:\n"
+    "- code_generation: writing, implementing, or refactoring code\n"
+    "- code_review: reviewing diffs, PRs, auditing code quality\n"
+    "- classification: labeling, categorizing, or detecting sentiment\n"
+    "- summarization: condensing or summarizing text\n"
+    "- extraction: parsing or pulling structured data from text\n"
+    "- reasoning: explaining, analyzing, or step-by-step thinking\n"
+    "- conversation: casual chat or dialogue\n"
+    "- tool_selection: choosing or invoking tools/functions\n\n"
+    "Respond with ONLY the task type name, nothing else."
 )
 
 
 def _build_prompt(inp: ClassifierInput) -> str:
-    """Build a concise signal summary from ClassifierInput.
+    """Extract the last user message for classification.
 
-    Gives the LLM all structural context without raw prompt content.
-    Typically ~100-200 tokens.
+    Falls back to a minimal signal summary if no user message is available.
     """
-    lines = ["Signals:"]
+    if inp.last_user_message:
+        # Truncate to ~500 chars to keep Gemma's input small
+        msg = inp.last_user_message[:500]
+        return f"User message:\n{msg}"
 
-    # Tool signals
-    if inp.has_tools:
-        tool_desc = f"{inp.tool_count} tools available"
-        if inp.has_tool_calls:
-            tool_desc += ", model used tools"
-        lines.append(f"- Tools: {tool_desc}")
-    elif inp.has_tool_calls:
-        lines.append("- Tools: model used tools (no tool array)")
-
-    # Structural signals
-    lines.append(f"- Code fences in system prompt: {'yes' if inp.has_code_fence_in_system else 'no'}")
-    lines.append(f"- JSON schema in output: {'yes' if inp.has_json_schema else 'no'}")
-
-    # Token ratio
-    ratio_desc = "balanced"
-    if inp.token_ratio < 0.1:
-        ratio_desc = "very short output"
-    elif inp.token_ratio < 0.5:
-        ratio_desc = "short output"
-    elif inp.token_ratio > 3.0:
-        ratio_desc = "very long output"
-    elif inp.token_ratio > 1.5:
-        ratio_desc = "long output"
-    lines.append(f"- Token ratio: {inp.token_ratio:.1f} ({ratio_desc})")
-
-    # Keywords (the classifier-relevant terms, not raw content)
-    if inp.system_prompt_keywords:
-        lines.append(f"- System keywords: {', '.join(inp.system_prompt_keywords[:10])}")
-    if inp.user_prompt_keywords:
-        lines.append(f"- User keywords: {', '.join(inp.user_prompt_keywords[:10])}")
-
-    # Output format
-    if inp.output_format_hint:
-        lines.append(f"- Output format hint: {inp.output_format_hint}")
-
-    return "\n".join(lines)
+    # Fallback: no user message available (shouldn't happen in practice)
+    return "No user message available."
 
 
 def _parse_response(raw: str) -> tuple[TaskType, float]:
@@ -101,27 +76,41 @@ async def llm_classify(
     task_input: ClassifierInput,
     model: str = "google.gemma-3-27b-it",
     timeout_s: float = 2.0,
+    client: httpx.AsyncClient | None = None,
+    api_key: str | None = None,
 ) -> ClassificationResult:
-    """Classify using a budget LLM call via litellm.
+    """Classify via the upstream LiteLLM proxy using httpx.
 
+    Uses the same httpx path as regular chat messages to avoid litellm
+    client-side provider routing that misroutes prefixed model names.
     Raises on failure so the caller can fall back to rules-based.
     """
     prompt = _build_prompt(task_input)
 
-    response = await asyncio.wait_for(
-        litellm.acompletion(
-            model=model,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=20,
-            temperature=0.0,
-        ),
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": 20,
+        "temperature": 0.0,
+    }
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    if client is None:
+        raise RuntimeError("llm_classify requires an httpx client")
+
+    resp = await asyncio.wait_for(
+        client.post("/v1/chat/completions", json=body, headers=headers),
         timeout=timeout_s,
     )
+    resp.raise_for_status()
+    data = resp.json()
 
-    raw = response.choices[0].message.content.strip()
+    raw = data["choices"][0]["message"]["content"].strip()
     task_type, confidence = _parse_response(raw)
 
     return ClassificationResult(

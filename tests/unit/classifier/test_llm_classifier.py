@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+import asyncio
+import json
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from blockthrough.classifier.llm_classifier import (
@@ -35,72 +38,34 @@ def _make_input(**overrides) -> ClassifierInput:
     return ClassifierInput(**defaults)
 
 
+def _mock_httpx_response(content: str, status_code: int = 200) -> httpx.Response:
+    """Build a fake httpx.Response matching OpenAI chat completions format."""
+    body = {
+        "choices": [{"message": {"content": content}}],
+    }
+    return httpx.Response(
+        status_code=status_code,
+        json=body,
+        request=httpx.Request("POST", "http://test/v1/chat/completions"),
+    )
+
+
 class TestBuildPrompt:
-    def test_basic_signals(self):
-        inp = _make_input()
+    def test_user_message_used_as_prompt(self):
+        inp = _make_input(last_user_message="Write a Python function to sort a list")
         prompt = _build_prompt(inp)
-        assert "Signals:" in prompt
-        assert "Code fences in system prompt: no" in prompt
-        assert "JSON schema in output: no" in prompt
+        assert "User message:" in prompt
+        assert "Write a Python function to sort a list" in prompt
 
-    def test_tools_present(self):
-        inp = _make_input(has_tools=True, tool_count=5, has_tool_calls=True)
+    def test_user_message_truncated(self):
+        inp = _make_input(last_user_message="x" * 600)
         prompt = _build_prompt(inp)
-        assert "5 tools available" in prompt
-        assert "model used tools" in prompt
+        assert len(prompt.split("User message:\n")[1]) == 500
 
-    def test_tool_calls_without_tool_array(self):
-        inp = _make_input(has_tools=False, has_tool_calls=True)
+    def test_no_user_message_fallback(self):
+        inp = _make_input(last_user_message=None)
         prompt = _build_prompt(inp)
-        assert "model used tools (no tool array)" in prompt
-
-    def test_code_fences(self):
-        inp = _make_input(has_code_fence_in_system=True)
-        prompt = _build_prompt(inp)
-        assert "Code fences in system prompt: yes" in prompt
-
-    def test_json_schema(self):
-        inp = _make_input(has_json_schema=True)
-        prompt = _build_prompt(inp)
-        assert "JSON schema in output: yes" in prompt
-
-    def test_token_ratio_very_short(self):
-        inp = _make_input(token_ratio=0.05)
-        prompt = _build_prompt(inp)
-        assert "very short output" in prompt
-
-    def test_token_ratio_very_long(self):
-        inp = _make_input(token_ratio=4.0)
-        prompt = _build_prompt(inp)
-        assert "very long output" in prompt
-
-    def test_keywords_included(self):
-        inp = _make_input(
-            system_prompt_keywords=["implement", "function"],
-            user_prompt_keywords=["write code", "refactor"],
-        )
-        prompt = _build_prompt(inp)
-        assert "System keywords: implement, function" in prompt
-        assert "User keywords: write code, refactor" in prompt
-
-    def test_keywords_truncated_at_10(self):
-        inp = _make_input(
-            system_prompt_keywords=[f"kw{i}" for i in range(15)],
-        )
-        prompt = _build_prompt(inp)
-        # Should only include first 10
-        assert "kw9" in prompt
-        assert "kw10" not in prompt
-
-    def test_output_format_hint(self):
-        inp = _make_input(output_format_hint="json")
-        prompt = _build_prompt(inp)
-        assert "Output format hint: json" in prompt
-
-    def test_no_output_format_hint_omitted(self):
-        inp = _make_input(output_format_hint=None)
-        prompt = _build_prompt(inp)
-        assert "Output format hint" not in prompt
+        assert "No user message available" in prompt
 
 
 class TestParseResponse:
@@ -154,62 +119,87 @@ class TestParseResponse:
 class TestLlmClassify:
     @pytest.mark.asyncio
     async def test_successful_classification(self):
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "code_generation"
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post.return_value = _mock_httpx_response("code_generation")
 
-        with patch("blockthrough.classifier.llm_classifier.litellm") as mock_litellm:
-            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+        inp = _make_input(has_code_fence_in_system=True)
+        result = await llm_classify(inp, model="test-model", client=mock_client)
 
-            inp = _make_input(has_code_fence_in_system=True)
-            result = await llm_classify(inp, model="test-model")
+        assert result.task_type == TaskType.CODE_GENERATION
+        assert result.confidence == 0.85
+        assert "llm_classifier:test-model" in result.signals
 
-            assert result.task_type == TaskType.CODE_GENERATION
-            assert result.confidence == 0.85
-            assert "llm_classifier:test-model" in result.signals
-
-            # Verify the call was made with correct params
-            call_kwargs = mock_litellm.acompletion.call_args.kwargs
-            assert call_kwargs["model"] == "test-model"
-            assert call_kwargs["max_tokens"] == 20
-            assert call_kwargs["temperature"] == 0.0
+        # Verify the POST was made to the right endpoint with correct body
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[0][0] == "/v1/chat/completions"
+        body = call_args[1]["json"]
+        assert body["model"] == "test-model"
+        assert body["max_tokens"] == 20
+        assert body["temperature"] == 0.0
 
     @pytest.mark.asyncio
     async def test_invalid_response_returns_unknown(self):
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "gibberish"
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post.return_value = _mock_httpx_response("gibberish")
 
-        with patch("blockthrough.classifier.llm_classifier.litellm") as mock_litellm:
-            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+        inp = _make_input()
+        result = await llm_classify(inp, client=mock_client)
 
-            inp = _make_input()
-            result = await llm_classify(inp)
-
-            assert result.task_type == TaskType.UNKNOWN
-            assert result.confidence == 0.0
+        assert result.task_type == TaskType.UNKNOWN
+        assert result.confidence == 0.0
 
     @pytest.mark.asyncio
-    async def test_api_error_propagates(self):
-        """LLM errors should propagate so the caller can fall back to rules."""
-        with patch("blockthrough.classifier.llm_classifier.litellm") as mock_litellm:
-            mock_litellm.acompletion = AsyncMock(side_effect=RuntimeError("API down"))
+    async def test_http_error_propagates(self):
+        """HTTP errors should propagate so the caller can fall back to rules."""
+        error_resp = _mock_httpx_response("", status_code=500)
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post.return_value = error_resp
 
-            inp = _make_input()
-            with pytest.raises(RuntimeError, match="API down"):
-                await llm_classify(inp)
+        inp = _make_input()
+        with pytest.raises(httpx.HTTPStatusError):
+            await llm_classify(inp, client=mock_client)
+
+    @pytest.mark.asyncio
+    async def test_api_key_sent_as_bearer(self):
+        """When api_key is provided, it should be sent as Authorization header."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post.return_value = _mock_httpx_response("code_generation")
+
+        inp = _make_input()
+        await llm_classify(inp, client=mock_client, api_key="sk-test-key")
+
+        call_kwargs = mock_client.post.call_args[1]
+        assert call_kwargs["headers"]["Authorization"] == "Bearer sk-test-key"
+
+    @pytest.mark.asyncio
+    async def test_no_auth_header_when_no_key(self):
+        """When api_key is None, no Authorization header should be sent."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post.return_value = _mock_httpx_response("code_generation")
+
+        inp = _make_input()
+        await llm_classify(inp, client=mock_client)
+
+        call_kwargs = mock_client.post.call_args[1]
+        assert "Authorization" not in call_kwargs["headers"]
+
+    @pytest.mark.asyncio
+    async def test_no_client_raises(self):
+        """Calling without a client should raise RuntimeError."""
+        inp = _make_input()
+        with pytest.raises(RuntimeError, match="requires an httpx client"):
+            await llm_classify(inp)
 
     @pytest.mark.asyncio
     async def test_timeout_propagates(self):
         """Timeout should propagate so the caller can fall back."""
-        import asyncio
-
-        async def slow_completion(**kwargs):
+        async def slow_post(*args, **kwargs):
             await asyncio.sleep(10)
 
-        with patch("blockthrough.classifier.llm_classifier.litellm") as mock_litellm:
-            mock_litellm.acompletion = slow_completion
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post = slow_post
 
-            inp = _make_input()
-            with pytest.raises(asyncio.TimeoutError):
-                await llm_classify(inp, timeout_s=0.01)
+        inp = _make_input()
+        with pytest.raises(asyncio.TimeoutError):
+            await llm_classify(inp, timeout_s=0.01, client=mock_client)

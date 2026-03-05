@@ -36,3 +36,4 @@ class ClassifierInput(BaseModel):
     user_prompt_keywords: list[str] = []
     has_tool_calls: bool = False
     output_format_hint: str | None
+    last_user_message: str | None = None

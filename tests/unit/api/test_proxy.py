@@ -618,7 +618,7 @@ class TestIsPlanModeAnthropic:
 # Confidence-gated routing
 # ---------------------------------------------------------------------------
 
-def _make_routing_request(confidence_threshold=0.7, routing_enabled=True):
+def _make_routing_request(confidence_threshold=0.4, routing_enabled=True):
     """Build a mock Request with routing state configured."""
     request = MagicMock()
     request.app.state.routing_enabled = routing_enabled
@@ -636,9 +636,9 @@ class TestConfidenceGate:
     @pytest.mark.asyncio
     async def test_high_confidence_routes(self):
         """Confidence above threshold → routing proceeds normally."""
-        request = _make_routing_request(confidence_threshold=0.7)
+        request = _make_routing_request(confidence_threshold=0.4)
 
-        async def classify_fn(body, pt, ct):
+        async def classify_fn(request, body, pt, ct):
             return TaskType.CODE_GENERATION, 0.85, "hash123"
 
         with pytest.MonkeyPatch.context() as mp:
@@ -666,10 +666,10 @@ class TestConfidenceGate:
     @pytest.mark.asyncio
     async def test_low_confidence_passthrough(self):
         """Confidence below threshold → passthrough, keep requested model."""
-        request = _make_routing_request(confidence_threshold=0.7)
+        request = _make_routing_request(confidence_threshold=0.4)
 
-        async def classify_fn(body, pt, ct):
-            return TaskType.CONVERSATION, 0.4, "hash456"
+        async def classify_fn(request, body, pt, ct):
+            return TaskType.CONVERSATION, 0.2, "hash456"
 
         model, decision, (tt, conf, sh) = await _maybe_route(
             request,
@@ -682,14 +682,14 @@ class TestConfidenceGate:
         assert decision is not None
         assert decision.was_overridden is False
         assert "classifier confidence" in decision.reason
-        assert "0.40" in decision.reason
+        assert "0.20" in decision.reason
 
     @pytest.mark.asyncio
     async def test_none_confidence_passthrough(self):
         """None confidence → passthrough."""
-        request = _make_routing_request(confidence_threshold=0.7)
+        request = _make_routing_request(confidence_threshold=0.4)
 
-        async def classify_fn(body, pt, ct):
+        async def classify_fn(request, body, pt, ct):
             return TaskType.CONVERSATION, None, "hash789"
 
         model, decision, (tt, conf, sh) = await _maybe_route(
@@ -706,11 +706,11 @@ class TestConfidenceGate:
 
     @pytest.mark.asyncio
     async def test_confidence_at_threshold_routes(self):
-        """Confidence exactly at threshold (0.7) → routing proceeds (gate is <, not <=)."""
-        request = _make_routing_request(confidence_threshold=0.7)
+        """Confidence exactly at threshold (0.4) → routing proceeds (gate is <, not <=)."""
+        request = _make_routing_request(confidence_threshold=0.4)
 
-        async def classify_fn(body, pt, ct):
-            return TaskType.CODE_GENERATION, 0.7, "hash_exact"
+        async def classify_fn(request, body, pt, ct):
+            return TaskType.CODE_GENERATION, 0.4, "hash_exact"
 
         with pytest.MonkeyPatch.context() as mp:
             routed = RoutingDecision(
@@ -735,9 +735,9 @@ class TestConfidenceGate:
     @pytest.mark.asyncio
     async def test_plan_mode_ignores_confidence(self):
         """Plan mode → force Opus regardless of confidence."""
-        request = _make_routing_request(confidence_threshold=0.7)
+        request = _make_routing_request(confidence_threshold=0.4)
 
-        async def classify_fn(body, pt, ct):
+        async def classify_fn(request, body, pt, ct):
             return TaskType.CONVERSATION, 0.3, "hash_plan"
 
         body = {"messages": [

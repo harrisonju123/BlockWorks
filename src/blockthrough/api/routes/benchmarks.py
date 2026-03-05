@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -127,12 +127,31 @@ def _config_from_row(row: dict, env_cfg) -> BenchmarkConfigResponse:
 
 @router.get("/fitness-matrix", response_model=FitnessMatrixResponse)
 async def fitness_matrix(
+    request: Request,
     org_id: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> FitnessMatrixResponse:
-    """Returns the fitness matrix: per (model, task_type) quality/cost/latency."""
-    entries = await get_fitness_matrix(db, org_id)
-    return FitnessMatrixResponse(entries=entries)
+    """Returns the fitness matrix: per (model, task_type) quality/cost/latency.
+
+    Merges DB benchmark results with the in-memory fitness cache (which
+    includes synthetic entries for all MODEL_CATALOG models). DB entries
+    take priority over synthetic ones.
+    """
+    db_entries = await get_fitness_matrix(db, org_id)
+
+    # Overlay: DB entries win over synthetic; include synthetic for models
+    # that have no real benchmark data yet.
+    fitness_cache = getattr(request.app.state, "fitness_cache", None)
+    if fitness_cache is not None:
+        db_keys = {(e.task_type, e.model) for e in db_entries}
+        cached = fitness_cache.get_all_entries()
+        merged = list(db_entries) + [
+            c for c in cached
+            if (c.task_type, c.model) not in db_keys
+        ]
+        return FitnessMatrixResponse(entries=merged)
+
+    return FitnessMatrixResponse(entries=db_entries)
 
 
 @router.get("/results", response_model=BenchmarkResultsResponse)
