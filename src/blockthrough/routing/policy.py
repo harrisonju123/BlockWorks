@@ -13,7 +13,7 @@ from typing import Any
 import yaml
 
 from blockthrough.models import MODEL_CATALOG
-from blockthrough.routing.types import QUALITY_FLOOR, RoutingPolicy, RoutingRule, SelectionCriteria
+from blockthrough.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
 from blockthrough.types import TaskType
 
 # All task_type values the router recognizes, plus the wildcard
@@ -111,26 +111,10 @@ def validate_policy(policy: RoutingPolicy) -> None:
         raise PolicyValidationError(errors)
 
 
-# Complex task types that get higher quality thresholds and mid-tier fallbacks
-_COMPLEX_TASKS: set[TaskType] = {
-    TaskType.CODE_GENERATION, TaskType.CODE_REVIEW,
-    TaskType.SUMMARIZATION, TaskType.REASONING,
+# Tasks where budget models are genuinely unreliable (scores 0.30-0.40)
+_HARD_TASKS: set[TaskType] = {
+    TaskType.CODE_GENERATION, TaskType.CODE_REVIEW, TaskType.REASONING,
 }
-
-
-def _compute_task_threshold(entries: list[Any]) -> float:
-    """Derive min_quality from actual benchmark data for a task type.
-
-    Uses upper-median quality of benchmarked models so at least ceil(N/2)
-    models qualify. Clamps between QUALITY_FLOOR (0.7) and 0.95.
-    """
-    real = [e for e in entries if e.sample_size > 0]
-    if not real:
-        return 0.8
-    qualities = sorted(e.avg_quality for e in real)
-    # Upper-median: ensures at least half the models meet the threshold
-    median_q = qualities[len(qualities) // 2]
-    return max(QUALITY_FLOOR, min(0.95, round(median_q, 3)))
 
 
 # Cache keyed by config tuple + fitness cache timestamp for self-invalidation.
@@ -166,15 +150,15 @@ def bootstrap_policy(fitness_cache: Any = None) -> RoutingPolicy:
     task_types = [t for t in TaskType if t != TaskType.UNKNOWN]
 
     for task in task_types:
+        # Static floor: hard tasks always require at least 0.70
+        static_floor = 0.70 if task in _HARD_TASKS else 0.55
         if has_fitness:
-            entries = fitness_cache.get_entries_for_task(task.value)
-            min_q = _compute_task_threshold(entries)
             criteria = SelectionCriteria.BEST_VALUE
         else:
-            min_q = 0.85 if task in _COMPLEX_TASKS else 0.8
             criteria = SelectionCriteria.CHEAPEST_ABOVE_QUALITY
+        min_q = static_floor
 
-        fallback = cfg.routing_model_mid if task in _COMPLEX_TASKS else cfg.routing_model_low
+        fallback = cfg.routing_model_mid if task in _HARD_TASKS else cfg.routing_model_low
         rules.append(RoutingRule(
             task_type=task.value,
             criteria=criteria,
@@ -186,7 +170,7 @@ def bootstrap_policy(fitness_cache: Any = None) -> RoutingPolicy:
     rules.append(RoutingRule(
         task_type="*",
         criteria=SelectionCriteria.BEST_VALUE if has_fitness else SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
-        min_quality=0.75,
+        min_quality=0.55,
         fallback=cfg.routing_model_mid,
     ))
 

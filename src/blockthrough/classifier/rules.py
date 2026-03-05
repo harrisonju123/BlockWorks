@@ -89,13 +89,18 @@ def classify(task_input: ClassifierInput) -> ClassificationResult:
     signals: list[str] = []
     scores: dict[TaskType, float] = {t: 0.0 for t in TaskType}
 
-    # Signal: tool array present → likely tool selection
+    # Signal: tool array present — weak signal (agents always send tools)
     if task_input.has_tools:
         signals.append("tool_array_present")
-        scores[TaskType.TOOL_SELECTION] += 0.6
+        scores[TaskType.TOOL_SELECTION] += 0.15
         if task_input.tool_count > 3:
             signals.append("many_tools")
-            scores[TaskType.TOOL_SELECTION] += 0.2
+            scores[TaskType.TOOL_SELECTION] += 0.05
+
+    # Signal: model actually invoked tools — stronger evidence of tool selection
+    if task_input.has_tool_calls:
+        signals.append("model_used_tools")
+        scores[TaskType.TOOL_SELECTION] += 0.4
 
     # Signal: code fences in system prompt → likely code generation
     if task_input.has_code_fence_in_system:
@@ -160,10 +165,10 @@ def classify(task_input: ClassifierInput) -> ClassificationResult:
             scores[TaskType.SUMMARIZATION] += 0.1
             scores[TaskType.REASONING] += 0.1
 
-    # If no tools and no strong signals, check for conversation pattern
-    if not task_input.has_tools and max(scores.values()) < 0.3:
+    # Conversation fallback: no strong signals from keywords or structure
+    if max(scores.values()) < 0.3:
         signals.append("no_strong_signals_conversation_fallback")
-        scores[TaskType.CONVERSATION] += 0.3
+        scores[TaskType.CONVERSATION] += 0.35
 
     # Pick the highest-scoring type
     best_type = max(scores, key=lambda t: scores[t])

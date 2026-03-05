@@ -49,6 +49,8 @@ class BlockThroughConfig(BaseSettings):
         "gpt-4o-mini",
         "google.gemma-3-27b-it",
         "openai.gpt-oss-120b-1:0",
+        "minimax.minimax-m2.1",
+        "moonshot.kimi-k2-thinking",
     ]
     benchmark_judge_model: str = "claude-sonnet-4-6"
     benchmark_smart_targeting: bool = True

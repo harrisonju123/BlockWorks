@@ -198,7 +198,7 @@ async def lifespan(app: FastAPI):
                 logger.warning("Could not reach upstream for model list (attempt %d/5)", attempt + 1)
             await asyncio.sleep(2)
         if app.state.upstream_models is None:
-            logger.error("Could not fetch upstream models after 5 attempts — /v1/messages routing will be restricted to requested model")
+            logger.warning("Could not fetch upstream models after 5 attempts — routing will use full catalog (no allowed_models filter)")
 
         fitness_refresh_task = asyncio.create_task(
             _refresh_fitness_cache(app, cfg.routing_fitness_cache_ttl_s)

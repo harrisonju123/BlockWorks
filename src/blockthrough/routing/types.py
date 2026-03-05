@@ -66,4 +66,4 @@ class RoutingDecision(BaseModel):
 
 # Absolute quality floor enforced regardless of policy settings.
 # Prevents routing to models with dangerously low quality scores.
-QUALITY_FLOOR = 0.7
+QUALITY_FLOOR = 0.30

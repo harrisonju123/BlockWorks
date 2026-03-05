@@ -8,7 +8,6 @@ from blockthrough.benchmarking.types import FitnessEntry
 from blockthrough.config import get_config
 from blockthrough.models import MODEL_CATALOG
 from blockthrough.routing.policy import (
-    _compute_task_threshold,
     bootstrap_policy,
     clear_bootstrap_cache,
     validate_policy,
@@ -60,32 +59,32 @@ class TestBootstrapPolicy:
     def test_simple_tasks_use_low_fallback(self) -> None:
         cfg = get_config()
         policy = bootstrap_policy()
-        simple = {"classification", "extraction", "conversation", "tool_selection"}
+        simple = {"classification", "extraction", "conversation", "tool_selection", "summarization"}
         for rule in policy.rules:
             if rule.task_type in simple:
                 assert rule.fallback == cfg.routing_model_low
 
-    def test_complex_tasks_use_mid_fallback(self) -> None:
+    def test_hard_tasks_use_mid_fallback(self) -> None:
         cfg = get_config()
         policy = bootstrap_policy()
-        complex_tasks = {"code_generation", "code_review", "summarization", "reasoning"}
+        hard_tasks = {"code_generation", "code_review", "reasoning"}
         for rule in policy.rules:
-            if rule.task_type in complex_tasks:
+            if rule.task_type in hard_tasks:
                 assert rule.fallback == cfg.routing_model_mid
 
     def test_simple_tasks_quality_threshold(self) -> None:
         policy = bootstrap_policy()
-        simple = {"classification", "extraction", "conversation", "tool_selection"}
+        simple = {"classification", "extraction", "conversation", "tool_selection", "summarization"}
         for rule in policy.rules:
             if rule.task_type in simple:
-                assert rule.min_quality == 0.8
+                assert rule.min_quality == 0.55
 
-    def test_complex_tasks_quality_threshold(self) -> None:
+    def test_hard_tasks_quality_threshold(self) -> None:
         policy = bootstrap_policy()
-        complex_tasks = {"code_generation", "code_review", "summarization", "reasoning"}
+        hard_tasks = {"code_generation", "code_review", "reasoning"}
         for rule in policy.rules:
-            if rule.task_type in complex_tasks:
-                assert rule.min_quality == 0.85
+            if rule.task_type in hard_tasks:
+                assert rule.min_quality == 0.70
 
     def test_passes_validation(self) -> None:
         policy = bootstrap_policy()
@@ -137,19 +136,19 @@ class TestSyntheticFitness:
     def test_task_qualities_override_tier_default(self) -> None:
         """Models with task_qualities get per-task scores, not flat tier defaults."""
         entries = generate_synthetic_fitness()
-        # GPT-OSS-120b has reasoning=0.68 which differs from tier-3 default 0.75
+        # GPT-OSS-120b (tier 2) has reasoning=0.72 which differs from tier-2 default 0.79
         oss_reasoning = next(
             e for e in entries
             if e.model == "openai.gpt-oss-120b-1:0" and e.task_type == "reasoning"
         )
-        assert oss_reasoning.avg_quality == 0.68
+        assert oss_reasoning.avg_quality == 0.72
 
-        # GPT-5.2 has conversation=0.82 which differs from tier-2 default 0.85
+        # GPT-5.2 (tier 1) has conversation=0.84 which differs from tier-1 default 0.93
         gpt52_conversation = next(
             e for e in entries
             if e.model == "gpt-5.2-chat-latest" and e.task_type == "conversation"
         )
-        assert gpt52_conversation.avg_quality == 0.82
+        assert gpt52_conversation.avg_quality == 0.84
 
     def test_task_qualities_cover_all_task_types(self) -> None:
         """Every model with task_qualities must cover all non-UNKNOWN task types."""
@@ -279,15 +278,15 @@ class TestBootstrapWithSyntheticFitness:
             fitness_cache=cache,
             policy=policy,
         )
-        # GPT-OSS-120b has conversation quality 0.80 (above 0.8 threshold)
+        # GPT-OSS-120b has conversation quality 0.81 (above 0.55 threshold)
         # at a fraction of GPT-5.2's cost, so BEST_VALUE should pick it
         selected_info = MODEL_CATALOG.get(decision.selected_model)
         gpt52_info = MODEL_CATALOG["gpt-5.2-chat-latest"]
         assert selected_info is not None
         assert selected_info.avg_cost <= gpt52_info.avg_cost
 
-    def test_reasoning_prefers_capable_model(self) -> None:
-        """For reasoning, BEST_VALUE should not pick a weak cheap model."""
+    def test_reasoning_excludes_budget_models(self) -> None:
+        """For reasoning (hard task), budget models with scores <0.70 are excluded."""
         cache = FitnessCache()
         cache.update(generate_synthetic_fitness())
         policy = bootstrap_policy(fitness_cache=cache)
@@ -298,10 +297,10 @@ class TestBootstrapWithSyntheticFitness:
             fitness_cache=cache,
             policy=policy,
         )
-        # GPT-OSS-120b has reasoning=0.68 which is below quality floor (0.7)
-        # so it should NOT be selected for reasoning tasks
-        assert decision.selected_model != "openai.gpt-oss-120b-1:0"
+        # Budget models have reasoning scores 0.35-0.40, well below the 0.70 hard-task threshold
         assert decision.selected_model != "openai.gpt-oss-20b-1:0"
+        assert decision.selected_model != "claude-haiku-4-5-20251001"
+        assert decision.selected_model != "gpt-4o-mini"
 
     def test_complex_task_routes_appropriately(self) -> None:
         """Complex task with opus request should route away from frontier."""
@@ -433,8 +432,8 @@ class TestDataDrivenBootstrap:
         for rule in policy.rules:
             assert rule.criteria == SelectionCriteria.BEST_VALUE
 
-    def test_threshold_from_median(self) -> None:
-        """Threshold is derived from median quality of benchmarked models."""
+    def test_fitness_uses_static_floor_not_median(self) -> None:
+        """With fitness data, min_quality uses static floor — not data-derived median."""
         cache = FitnessCache()
         cache.update([
             FitnessEntry(task_type="classification", model=f"m{i}",
@@ -444,8 +443,8 @@ class TestDataDrivenBootstrap:
         policy = bootstrap_policy(fitness_cache=cache)
 
         classification_rule = next(r for r in policy.rules if r.task_type == "classification")
-        # median of [0.70, 0.75, 0.78, 0.80, 0.85] = 0.78
-        assert classification_rule.min_quality == 0.78
+        # Static floor for simple tasks, NOT the data-derived median (0.78)
+        assert classification_rule.min_quality == 0.55
 
     def test_without_fitness_uses_static(self) -> None:
         """bootstrap_policy(fitness_cache=None) uses CHEAPEST_ABOVE_QUALITY with static thresholds."""
@@ -455,10 +454,10 @@ class TestDataDrivenBootstrap:
             assert rule.criteria == SelectionCriteria.CHEAPEST_ABOVE_QUALITY
 
         simple_rule = next(r for r in policy.rules if r.task_type == "classification")
-        assert simple_rule.min_quality == 0.8
+        assert simple_rule.min_quality == 0.55
 
-        complex_rule = next(r for r in policy.rules if r.task_type == "code_generation")
-        assert complex_rule.min_quality == 0.85
+        hard_rule = next(r for r in policy.rules if r.task_type == "code_generation")
+        assert hard_rule.min_quality == 0.70
 
     def test_empty_fitness_uses_static(self) -> None:
         """Empty FitnessCache behaves same as None."""
@@ -468,10 +467,9 @@ class TestDataDrivenBootstrap:
         for rule in policy.rules:
             assert rule.criteria == SelectionCriteria.CHEAPEST_ABOVE_QUALITY
 
-    def test_complex_tasks_no_longer_unreachable(self) -> None:
-        """With real benchmark data, code_generation threshold drops below the quality ceiling."""
+    def test_hard_task_uses_static_floor_with_fitness(self) -> None:
+        """Hard tasks use the 0.70 static floor regardless of benchmark data."""
         cache = FitnessCache()
-        # Simulate real benchmark data where quality ceiling is ~0.787
         cache.update([
             FitnessEntry(task_type="code_generation", model=f"m{i}",
                          avg_quality=q, avg_cost=0.001, avg_latency=500, sample_size=20)
@@ -480,41 +478,7 @@ class TestDataDrivenBootstrap:
         policy = bootstrap_policy(fitness_cache=cache)
 
         code_rule = next(r for r in policy.rules if r.task_type == "code_generation")
-        # median = 0.766, much lower than the old hardcoded 0.85
-        assert code_rule.min_quality == 0.766
-        # Multiple models now qualify (those at 0.766 and above)
-        assert code_rule.min_quality < 0.787
+        # Static floor for hard tasks, NOT data-derived median
+        assert code_rule.min_quality == 0.70
 
 
-class TestComputeTaskThreshold:
-
-    def test_median_of_real_entries(self) -> None:
-        entries = [
-            FitnessEntry(task_type="x", model=f"m{i}",
-                         avg_quality=q, avg_cost=0.001, avg_latency=500, sample_size=10)
-            for i, q in enumerate([0.70, 0.80, 0.85, 0.90])
-        ]
-        # median of [0.70, 0.80, 0.85, 0.90] -> index 2 -> 0.85
-        assert _compute_task_threshold(entries) == 0.85
-
-    def test_ignores_synthetic_entries(self) -> None:
-        """Entries with sample_size=0 are filtered out."""
-        entries = [
-            FitnessEntry(task_type="x", model="syn",
-                         avg_quality=0.95, avg_cost=0.001, avg_latency=500, sample_size=0),
-            FitnessEntry(task_type="x", model="real",
-                         avg_quality=0.78, avg_cost=0.001, avg_latency=500, sample_size=10),
-        ]
-        # Only the real entry (0.78) counts
-        assert _compute_task_threshold(entries) == 0.78
-
-    def test_clamps_to_quality_floor(self) -> None:
-        """Threshold never goes below QUALITY_FLOOR (0.7)."""
-        entries = [
-            FitnessEntry(task_type="x", model="bad",
-                         avg_quality=0.5, avg_cost=0.001, avg_latency=500, sample_size=10),
-        ]
-        assert _compute_task_threshold(entries) == 0.7
-
-    def test_empty_returns_default(self) -> None:
-        assert _compute_task_threshold([]) == 0.8

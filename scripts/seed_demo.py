@@ -61,20 +61,20 @@ DB_URL = _env_url.replace("postgresql+asyncpg://", "postgresql://")
 
 # Derive models from the canonical catalog
 _SEED_MODELS = [
-    # Tier 1 (~12% traffic)
+    # Tier 1: Opus-class + GPT-5.2 (~12% traffic)
     "claude-opus-4-5",
     "claude-opus-4-6",
     "claude-opus-4-20250514",
-    # Tier 2 (~48% traffic)
+    "gpt-5.2-chat-latest",
+    # Tier 2: Sonnet / strong mid-tier (~48% traffic)
     "claude-sonnet-4-6",
     "claude-sonnet-4-20250514",
-    "gpt-5.2-chat-latest",
     "gpt-4o",
     "qwen.qwen3-vl-235b-a22b",
     "moonshot.kimi-k2-thinking",
     "openai.gpt-oss-120b-1:0",
     "minimax.minimax-m2.1",
-    # Tier 3 (~40% traffic)
+    # Tier 3: Budget (~40% traffic)
     "claude-haiku-4-5-20251001",
     "gpt-4o-mini",
     "google.gemma-3-27b-it",
@@ -633,8 +633,8 @@ def _sample_quality(task_type: str, bench_tier: int, original_tier: int) -> floa
         noise = random.uniform(-0.03, 0.03)
         return round(max(0.0, min(1.0, mean + noise)), 3)
 
-    # Fallback: tier-based ranges that don't overlap
-    base = {1: 0.92, 2: 0.86, 3: 0.74}.get(bench_tier, 0.80)
+    # Fallback: tier-based ranges matching normalized MODEL_CATALOG averages
+    base = {1: 0.91, 2: 0.79, 3: 0.55}.get(bench_tier, 0.79)
     noise = random.uniform(-0.03, 0.03)
     return round(max(0.0, min(1.0, base + noise)), 3)
 

@@ -25,6 +25,7 @@ class ModelInfo:
     cost_per_1k_output: float
     downgrade_to: str | None = None
     supports_tool_use: bool = True
+    supports_thinking: bool = True
     # Per-task quality scores (0.0–1.0) for synthetic fitness generation.
     # Keys are TaskType values. Missing keys fall back to the tier default.
     # This lets the router differentiate models within the same tier —
@@ -51,6 +52,33 @@ class ModelInfo:
         return tier_default
 
 
+# Shared task_qualities for model families — avoids duplication across aliases.
+_OPUS_46_QUALITIES: tuple[tuple[str, float], ...] = (
+    ("classification", 0.96), ("code_generation", 0.93), ("code_review", 0.91),
+    ("conversation", 0.95), ("extraction", 0.94), ("reasoning", 0.93),
+    ("summarization", 0.94), ("tool_selection", 0.92),
+)
+_OPUS_45_QUALITIES: tuple[tuple[str, float], ...] = (
+    ("classification", 0.94), ("code_generation", 0.90), ("code_review", 0.88),
+    ("conversation", 0.93), ("extraction", 0.92), ("reasoning", 0.91),
+    ("summarization", 0.92), ("tool_selection", 0.90),
+)
+_SONNET_4_QUALITIES: tuple[tuple[str, float], ...] = (
+    ("classification", 0.87), ("code_generation", 0.75), ("code_review", 0.70),
+    ("conversation", 0.81), ("extraction", 0.85), ("reasoning", 0.72),
+    ("summarization", 0.80), ("tool_selection", 0.77),
+)
+_HAIKU_QUALITIES: tuple[tuple[str, float], ...] = (
+    ("classification", 0.72), ("code_generation", 0.38), ("code_review", 0.35),
+    ("conversation", 0.68), ("extraction", 0.73), ("reasoning", 0.40),
+    ("summarization", 0.65), ("tool_selection", 0.58),
+)
+_BUDGET_QUALITIES: tuple[tuple[str, float], ...] = (
+    ("classification", 0.72), ("code_generation", 0.35), ("code_review", 0.32),
+    ("conversation", 0.68), ("extraction", 0.73), ("reasoning", 0.40),
+    ("summarization", 0.65), ("tool_selection", 0.58),
+)
+
 MODEL_CATALOG: dict[str, ModelInfo] = {
     # ── Tier 1: Opus-class / frontier ───────────────────────────────
     "claude-opus-4-20250514": ModelInfo(
@@ -58,52 +86,65 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_input=0.015,
         cost_per_1k_output=0.075,
         downgrade_to="claude-sonnet-4-6",
+        task_qualities=_OPUS_46_QUALITIES,
     ),
     "claude-opus-4-6-20250527": ModelInfo(
         tier=1,
         cost_per_1k_input=0.015,
         cost_per_1k_output=0.075,
         downgrade_to="claude-sonnet-4-6",
+        task_qualities=_OPUS_46_QUALITIES,
     ),
     "claude-opus-4-6": ModelInfo(
         tier=1,
         cost_per_1k_input=0.015,
         cost_per_1k_output=0.075,
         downgrade_to="claude-sonnet-4-6",
+        task_qualities=_OPUS_46_QUALITIES,
     ),
     "claude-opus-4-5-20251101": ModelInfo(
         tier=1,
         cost_per_1k_input=0.015,
         cost_per_1k_output=0.075,
         downgrade_to="claude-sonnet-4-6",
+        task_qualities=_OPUS_45_QUALITIES,
     ),
     "claude-opus-4-5": ModelInfo(
         tier=1,
         cost_per_1k_input=0.015,
         cost_per_1k_output=0.075,
         downgrade_to="claude-sonnet-4-6",
+        task_qualities=_OPUS_45_QUALITIES,
     ),
     "us.anthropic.claude-opus-4-5-20251101-v1:0": ModelInfo(
         tier=1,
         cost_per_1k_input=0.015,
         cost_per_1k_output=0.075,
         downgrade_to="claude-sonnet-4-6",
+        task_qualities=_OPUS_45_QUALITIES,
     ),
-    # ── Tier 2: Sonnet / GPT-5.2 / strong mid-tier ─────────────────
+    # ── Tier 1: GPT-5.2 (promoted from tier 2) ─────────────────────
+    "gpt-5.2-chat-latest": ModelInfo(
+        tier=1,
+        cost_per_1k_input=0.00175,
+        cost_per_1k_output=0.014,
+        downgrade_to="claude-sonnet-4-6",
+        task_qualities=(
+            ("classification", 0.88), ("code_generation", 0.76), ("code_review", 0.72),
+            ("conversation", 0.84), ("extraction", 0.85), ("reasoning", 0.73),
+            ("summarization", 0.78), ("tool_selection", 0.75),
+        ),
+    ),
+    # ── Tier 2: Sonnet / strong mid-tier ──────────────────────────
     "claude-sonnet-4-6": ModelInfo(
         tier=2,
         cost_per_1k_input=0.003,
         cost_per_1k_output=0.015,
         downgrade_to="claude-haiku-4-5-20251001",
         task_qualities=(
-            ("code_generation", 0.91),
-            ("code_review", 0.90),
-            ("reasoning", 0.88),
-            ("tool_selection", 0.90),
-            ("summarization", 0.87),
-            ("conversation", 0.85),
-            ("classification", 0.84),
-            ("extraction", 0.86),
+            ("classification", 0.88), ("code_generation", 0.76), ("code_review", 0.72),
+            ("conversation", 0.82), ("extraction", 0.87), ("reasoning", 0.74),
+            ("summarization", 0.82), ("tool_selection", 0.75),
         ),
     ),
     "claude-sonnet-4-5-20250929": ModelInfo(
@@ -111,28 +152,14 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_input=0.003,
         cost_per_1k_output=0.015,
         downgrade_to="claude-haiku-4-5-20251001",
+        task_qualities=_SONNET_4_QUALITIES,
     ),
     "claude-sonnet-4-20250514": ModelInfo(
         tier=2,
         cost_per_1k_input=0.003,
         cost_per_1k_output=0.015,
         downgrade_to="claude-haiku-4-5-20251001",
-    ),
-    "gpt-5.2-chat-latest": ModelInfo(
-        tier=2,
-        cost_per_1k_input=0.00175,
-        cost_per_1k_output=0.014,
-        downgrade_to="claude-haiku-4-5-20251001",
-        task_qualities=(
-            ("reasoning", 0.90),
-            ("code_generation", 0.88),
-            ("code_review", 0.87),
-            ("summarization", 0.86),
-            ("conversation", 0.82),  # capable but overkill for chat
-            ("classification", 0.80),
-            ("extraction", 0.83),
-            ("tool_selection", 0.85),
-        ),
+        task_qualities=_SONNET_4_QUALITIES,
     ),
     "gpt-5.2-codex": ModelInfo(
         tier=2,
@@ -140,14 +167,9 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_output=0.014,
         downgrade_to="claude-haiku-4-5-20251001",
         task_qualities=(
-            ("code_generation", 0.92),
-            ("code_review", 0.90),
-            ("reasoning", 0.87),
-            ("tool_selection", 0.86),
-            ("conversation", 0.78),
-            ("classification", 0.76),
-            ("summarization", 0.80),
-            ("extraction", 0.80),
+            ("classification", 0.82), ("code_generation", 0.80), ("code_review", 0.76),
+            ("conversation", 0.72), ("extraction", 0.78), ("reasoning", 0.77),
+            ("summarization", 0.74), ("tool_selection", 0.80),
         ),
     ),
     "gpt-4o": ModelInfo(
@@ -156,14 +178,9 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_output=0.01,
         downgrade_to="claude-haiku-4-5-20251001",
         task_qualities=(
-            ("conversation", 0.86),
-            ("reasoning", 0.84),
-            ("code_generation", 0.85),
-            ("code_review", 0.84),
-            ("summarization", 0.85),
-            ("classification", 0.83),
-            ("extraction", 0.84),
-            ("tool_selection", 0.84),
+            ("classification", 0.87), ("code_generation", 0.73), ("code_review", 0.72),
+            ("conversation", 0.81), ("extraction", 0.85), ("reasoning", 0.72),
+            ("summarization", 0.82), ("tool_selection", 0.75),
         ),
     ),
     "gpt-4-turbo": ModelInfo(
@@ -171,6 +188,11 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_input=0.01,
         cost_per_1k_output=0.03,
         downgrade_to="claude-haiku-4-5-20251001",
+        task_qualities=(
+            ("classification", 0.85), ("code_generation", 0.72), ("code_review", 0.70),
+            ("conversation", 0.80), ("extraction", 0.83), ("reasoning", 0.70),
+            ("summarization", 0.78), ("tool_selection", 0.73),
+        ),
     ),
     "qwen.qwen3-vl-235b-a22b": ModelInfo(
         tier=2,
@@ -178,6 +200,11 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_output=0.01,
         downgrade_to="qwen.qwen3-next-80b-a3b",
         supports_tool_use=False,
+        task_qualities=(
+            ("classification", 0.87), ("code_generation", 0.76), ("code_review", 0.74),
+            ("conversation", 0.81), ("extraction", 0.85), ("reasoning", 0.72),
+            ("summarization", 0.78), ("tool_selection", 0.77),
+        ),
     ),
     "qwen.qwen3-next-80b-a3b": ModelInfo(
         tier=2,
@@ -193,14 +220,9 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         downgrade_to="moonshotai.kimi-k2.5",
         supports_tool_use=False,
         task_qualities=(
-            ("reasoning", 0.87),
-            ("code_generation", 0.84),
-            ("summarization", 0.83),
-            ("conversation", 0.82),
-            ("extraction", 0.81),
-            ("classification", 0.80),
-            ("code_review", 0.82),
-            ("tool_selection", 0.78),
+            ("classification", 0.85), ("code_generation", 0.76), ("code_review", 0.72),
+            ("conversation", 0.81), ("extraction", 0.84), ("reasoning", 0.74),
+            ("summarization", 0.80), ("tool_selection", 0.72),
         ),
     ),
     "moonshotai.kimi-k2.5": ModelInfo(
@@ -209,31 +231,21 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_output=0.003,
         supports_tool_use=False,
         task_qualities=(
-            ("conversation", 0.83),
-            ("summarization", 0.82),
-            ("reasoning", 0.84),
-            ("code_generation", 0.82),
-            ("extraction", 0.81),
-            ("classification", 0.80),
-            ("code_review", 0.80),
-            ("tool_selection", 0.77),
+            ("classification", 0.84), ("code_generation", 0.74), ("code_review", 0.70),
+            ("conversation", 0.80), ("extraction", 0.83), ("reasoning", 0.72),
+            ("summarization", 0.78), ("tool_selection", 0.72),
         ),
     ),
     "openai.gpt-oss-120b-1:0": ModelInfo(
-        tier=3,
+        tier=2,
         cost_per_1k_input=0.00015,
         cost_per_1k_output=0.00069,
         downgrade_to="openai.gpt-oss-20b-1:0",
         supports_tool_use=False,
         task_qualities=(
-            ("conversation", 0.80),  # strong for basic chat at fraction of cost
-            ("summarization", 0.78),
-            ("extraction", 0.77),
-            ("classification", 0.76),
-            ("code_generation", 0.72),  # weaker on complex code
-            ("code_review", 0.70),
-            ("reasoning", 0.68),  # not suited for deep multi-step reasoning
-            ("tool_selection", 0.65),
+            ("classification", 0.87), ("code_generation", 0.76), ("code_review", 0.74),
+            ("conversation", 0.81), ("extraction", 0.84), ("reasoning", 0.72),
+            ("summarization", 0.83), ("tool_selection", 0.75),
         ),
     ),
     "minimax.minimax-m2.1": ModelInfo(
@@ -241,22 +253,19 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_input=0.00027,
         cost_per_1k_output=0.00095,
         supports_tool_use=False,
+        task_qualities=(
+            ("classification", 0.85), ("code_generation", 0.76), ("code_review", 0.72),
+            ("conversation", 0.81), ("extraction", 0.85), ("reasoning", 0.70),
+            ("summarization", 0.80), ("tool_selection", 0.77),
+        ),
     ),
     # ── Tier 3: Haiku / mini / small open-source ────────────────────
     "claude-haiku-4-5-20251001": ModelInfo(
         tier=3,
         cost_per_1k_input=0.0008,
         cost_per_1k_output=0.004,
-        task_qualities=(
-            ("conversation", 0.82),
-            ("classification", 0.83),
-            ("extraction", 0.81),
-            ("summarization", 0.80),
-            ("tool_selection", 0.80),
-            ("code_generation", 0.74),
-            ("code_review", 0.73),
-            ("reasoning", 0.72),
-        ),
+        supports_thinking=False,
+        task_qualities=_HAIKU_QUALITIES,
     ),
     # gpt-4o-mini not available in LiteLLM — kept for cost calculations
     # if events reference it, but routing won't select it.
@@ -264,12 +273,14 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         tier=3,
         cost_per_1k_input=0.00015,
         cost_per_1k_output=0.0006,
+        task_qualities=_HAIKU_QUALITIES,
     ),
     "us.amazon.nova-2-lite-v1:0": ModelInfo(
         tier=3,
         cost_per_1k_input=0.0003,
         cost_per_1k_output=0.0025,
         supports_tool_use=False,
+        task_qualities=_BUDGET_QUALITIES,
     ),
     "qwen.qwen3-coder-30b-a3b-v1:0": ModelInfo(
         tier=3,
@@ -283,14 +294,9 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_output=0.00014,
         supports_tool_use=False,
         task_qualities=(
-            ("conversation", 0.74),  # adequate for simple chat
-            ("classification", 0.72),
-            ("extraction", 0.71),
-            ("summarization", 0.70),
-            ("code_generation", 0.62),
-            ("code_review", 0.60),
-            ("reasoning", 0.55),  # too small for serious reasoning
-            ("tool_selection", 0.55),
+            ("classification", 0.68), ("code_generation", 0.32), ("code_review", 0.30),
+            ("conversation", 0.60), ("extraction", 0.65), ("reasoning", 0.35),
+            ("summarization", 0.58), ("tool_selection", 0.48),
         ),
     ),
     "google.gemma-3-27b-it": ModelInfo(
@@ -299,6 +305,7 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_output=0.00015,
         downgrade_to="google.gemma-3-12b-it",
         supports_tool_use=False,
+        task_qualities=_BUDGET_QUALITIES,
     ),
     "google.gemma-3-12b-it": ModelInfo(
         tier=3,
@@ -326,6 +333,7 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_output=0.00015,
         downgrade_to="mistral.ministral-3-3b-instruct",
         supports_tool_use=False,
+        task_qualities=_BUDGET_QUALITIES,
     ),
     "mistral.ministral-3-3b-instruct": ModelInfo(
         tier=3,

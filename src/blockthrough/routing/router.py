@@ -27,9 +27,9 @@ _UNKNOWN_MODEL_INFO = ModelInfo(tier=3, cost_per_1k_input=0, cost_per_1k_output=
 
 # Synthetic fitness defaults by model tier — used when no benchmark data exists
 _TIER_DEFAULTS: dict[int, dict[str, float]] = {
-    1: {"quality": 0.95, "latency": 2000.0},
-    2: {"quality": 0.85, "latency": 1000.0},
-    3: {"quality": 0.75, "latency": 500.0},
+    1: {"quality": 0.93, "latency": 2000.0},
+    2: {"quality": 0.79, "latency": 1000.0},
+    3: {"quality": 0.56, "latency": 500.0},
 }
 
 
@@ -37,9 +37,9 @@ def generate_synthetic_fitness() -> list[FitnessEntry]:
     """Build synthetic FitnessEntry objects for all models in the catalog.
 
     Quality comes from per-model task_qualities when available, falling back
-    to tier defaults (high=0.95, mid=0.85, low=0.75). This lets the router
-    differentiate models within the same tier — e.g. GPT-5.2 scores 0.90
-    on reasoning while GPT-OSS-120b scores 0.68.
+    to tier defaults (high=0.93, mid=0.79, low=0.56). This lets the router
+    differentiate models within the same tier — e.g. Sonnet-4-6 scores 0.74
+    on reasoning while budget models score 0.35-0.40.
 
     sample_size=0 marks entries as synthetic so real benchmark data
     overwrites them via merge_fitness_entries.

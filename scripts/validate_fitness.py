@@ -34,7 +34,7 @@ QUALITY_THRESHOLD = 0.85
 MIN_SAMPLE_SIZE = 15
 
 _SIMPLE_TASKS = {t.value for t in _SIMPLE_TASK_ENUMS}
-_COMPLEX_TASKS = {"code_generation", "reasoning", "code_review"}
+_HARD_TASKS = {"code_generation", "reasoning", "code_review"}
 
 
 class ValidationResult:
@@ -134,7 +134,7 @@ async def validate(pool: asyncpg.Pool) -> ValidationResult:
             )
 
     # 4. Complex tasks: tier 2 should qualify
-    for tt in _COMPLEX_TASKS & task_types:
+    for tt in _HARD_TASKS & task_types:
         tier2_quals = [
             quality_map[(tt, row["benchmark_model"])]
             for row in rows

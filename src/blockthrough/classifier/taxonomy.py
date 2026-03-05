@@ -34,4 +34,5 @@ class ClassifierInput(BaseModel):
     model: str
     system_prompt_keywords: list[str]
     user_prompt_keywords: list[str] = []
+    has_tool_calls: bool = False
     output_format_hint: str | None

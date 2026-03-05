@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from blockthrough.models import MODEL_CATALOG
 from blockthrough.utils import infer_provider
 
 
@@ -76,6 +77,11 @@ def sanitize_for_target(
     target_provider = infer_provider(target_model)
 
     if source_provider == target_provider:
+        # Intra-Anthropic: strip thinking for models that don't support it (e.g. haiku)
+        if source_provider == "anthropic":
+            target_info = MODEL_CATALOG.get(target_model)
+            if "thinking" in body and target_info and not target_info.supports_thinking:
+                body.pop("thinking", None)
         return
 
     source_spec = PROVIDER_SPECS.get(source_provider)

@@ -32,7 +32,7 @@ from blockthrough.classifier.rules import (
     extract_keywords,
 )
 from blockthrough.classifier.taxonomy import ClassifierInput
-from blockthrough.models import MODEL_CATALOG
+from blockthrough.models import MODEL_CATALOG, get_anthropic_models
 from blockthrough.pipeline.context import FRAMEWORK_HINTS
 from blockthrough.pipeline.hasher import hash_content
 from blockthrough.api.routes.routing import record_decision
@@ -307,6 +307,14 @@ def _classify_request(
     tools = body.get("tools") or body.get("functions") or []
     token_ratio = compute_token_ratio(prompt_tokens, completion_tokens)
 
+    # Detect tool calls in conversation history (previous assistant turns)
+    has_tool_calls = any(
+        isinstance(msg, dict)
+        and msg.get("role") == "assistant"
+        and msg.get("tool_calls")
+        for msg in messages
+    )
+
     inp = ClassifierInput(
         system_prompt_hash=system_prompt_hash,
         has_tools=bool(tools),
@@ -319,6 +327,7 @@ def _classify_request(
         model=body.get("model", "unknown"),
         system_prompt_keywords=system_prompt_keywords,
         user_prompt_keywords=list(user_kw_set),
+        has_tool_calls=has_tool_calls,
         output_format_hint=output_format_hint,
     )
     result = classify(inp)
@@ -838,18 +847,18 @@ async def proxy_messages(request: Request) -> JSONResponse | StreamingResponse:
     model = body.get("model", "unknown")
     query_string = str(request.url.query)
 
-    # Routing: constrain to models actually available on the upstream LiteLLM.
-    # LiteLLM handles format translation, so any model it knows works on
-    # /v1/messages — no need to restrict to Anthropic-only.
+    # Routing: constrain to models actually available upstream.
+    # When LiteLLM is present, upstream_models lists everything it can serve.
+    # When direct-to-Anthropic (no LiteLLM /v1/models), fall back to
+    # Anthropic-only models since non-Anthropic would have no upstream.
     upstream_models: set[str] | None = getattr(request.app.state, "upstream_models", None)
-    if upstream_models is not None:
-        routed_model, _, _ = _maybe_route(
-            request, body, model, _classify_anthropic_request,
-            has_tool_use=_request_uses_tools_anthropic(body),
-            allowed_models=upstream_models,
-        )
-    else:
-        routed_model = model
+    if upstream_models is None:
+        upstream_models = get_anthropic_models()
+    routed_model, _, _ = _maybe_route(
+        request, body, model, _classify_anthropic_request,
+        has_tool_use=_request_uses_tools_anthropic(body),
+        allowed_models=upstream_models,
+    )
     original_model = model
     if routed_model != model:
         body["model"] = routed_model

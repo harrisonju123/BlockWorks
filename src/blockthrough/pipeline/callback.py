@@ -333,6 +333,7 @@ class BlockThroughCallback(CustomLogger):
                 model=kwargs.get("model", "unknown"),
                 system_prompt_keywords=system_prompt_keywords,
                 user_prompt_keywords=list(user_kw_set),
+                has_tool_calls=len(tool_calls) > 0,
                 output_format_hint=output_format_hint,
             )
             result = classify(classifier_input)

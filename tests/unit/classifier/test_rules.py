@@ -25,16 +25,48 @@ def _make_input(**overrides) -> ClassifierInput:
 
 
 class TestRulesClassifier:
-    def test_tool_selection(self):
-        inp = _make_input(has_tools=True, tool_count=5)
+    def test_tool_selection_with_tool_calls(self):
+        """Tools present + model actually called them → TOOL_SELECTION."""
+        inp = _make_input(has_tools=True, tool_count=5, has_tool_calls=True)
         result = classify(inp)
         assert result.task_type == TaskType.TOOL_SELECTION
         assert "tool_array_present" in result.signals
+        assert "model_used_tools" in result.signals
+
+    def test_tools_present_alone_not_tool_selection(self):
+        """Tools available but no tool calls and no keywords → should NOT be TOOL_SELECTION."""
+        inp = _make_input(has_tools=True, tool_count=10)
+        result = classify(inp)
+        assert result.task_type != TaskType.TOOL_SELECTION
+
+    def test_trivial_message_with_tools_is_conversation(self):
+        """Empty/trivial user message with tools available → CONVERSATION, not TOOL_SELECTION."""
+        inp = _make_input(has_tools=True, tool_count=20)
+        result = classify(inp)
+        assert result.task_type in (TaskType.CONVERSATION, TaskType.UNKNOWN)
+        assert "no_strong_signals_conversation_fallback" in result.signals
+
+    def test_tools_plus_tool_calls_is_tool_selection(self):
+        """has_tools + has_tool_calls → TOOL_SELECTION."""
+        inp = _make_input(has_tools=True, tool_count=5, has_tool_calls=True)
+        result = classify(inp)
+        assert result.task_type == TaskType.TOOL_SELECTION
 
     def test_code_generation_keywords(self):
         inp = _make_input(
             system_prompt_keywords=["implement", "function"],
             has_code_fence_in_system=True,
+        )
+        result = classify(inp)
+        assert result.task_type == TaskType.CODE_GENERATION
+
+    def test_code_generation_with_tools_present(self):
+        """Code gen keywords should win even when tools are available."""
+        inp = _make_input(
+            system_prompt_keywords=["implement", "function"],
+            has_code_fence_in_system=True,
+            has_tools=True,
+            tool_count=10,
         )
         result = classify(inp)
         assert result.task_type == TaskType.CODE_GENERATION
@@ -55,14 +87,21 @@ class TestRulesClassifier:
         assert result.task_type == TaskType.SUMMARIZATION
 
     def test_conversation_fallback(self):
-        """With no strong signals, classifier falls back to UNKNOWN at low confidence."""
+        """With no strong signals, classifier falls back to CONVERSATION."""
         inp = _make_input()
+        result = classify(inp)
+        assert result.task_type == TaskType.CONVERSATION
+        assert "no_strong_signals_conversation_fallback" in result.signals
+
+    def test_conversation_fallback_with_tools(self):
+        """Even with tools present, no strong signals → CONVERSATION."""
+        inp = _make_input(has_tools=True, tool_count=5)
         result = classify(inp)
         assert result.task_type in (TaskType.CONVERSATION, TaskType.UNKNOWN)
         assert "no_strong_signals_conversation_fallback" in result.signals
 
     def test_confidence_range(self):
-        inp = _make_input(has_tools=True, tool_count=10)
+        inp = _make_input(has_tools=True, tool_count=10, has_tool_calls=True)
         result = classify(inp)
         assert 0.0 <= result.confidence <= 1.0
 

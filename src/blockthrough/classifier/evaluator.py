@@ -136,6 +136,7 @@ def load_dataset(path: Path | None = None) -> list[EvalExample]:
                 model=row["model"],
                 system_prompt_keywords=keywords,
                 user_prompt_keywords=user_keywords,
+                has_tool_calls=row.get("has_tool_calls", False),
                 output_format_hint=row.get("output_format_hint"),
             )
 

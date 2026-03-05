@@ -224,9 +224,9 @@ class TestResolveHighestQualityUnderCost:
 class TestQualityFloor:
 
     def test_quality_floor_overrides_permissive_min_quality(self) -> None:
-        """Even if policy allows min_quality=0.5, the global floor of 0.7 applies."""
+        """Even if policy allows min_quality=0.1, the global floor of 0.30 applies."""
         entries = [
-            _make_entry("cheap-model", "classification", avg_quality=0.6, avg_cost=0.0001),
+            _make_entry("cheap-model", "classification", avg_quality=0.25, avg_cost=0.0001),
             _make_entry("claude-haiku-4-5-20251001", "classification", avg_quality=0.85, avg_cost=0.0008),
         ]
         cache = _make_cache(entries)
@@ -235,7 +235,7 @@ class TestQualityFloor:
                 RoutingRule(
                     task_type="classification",
                     criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
-                    min_quality=0.5,  # Permissive, but floor is 0.7
+                    min_quality=0.1,  # Permissive, but floor is 0.30
                     fallback="claude-haiku-4-5-20251001",
                 ),
             ]
@@ -243,15 +243,15 @@ class TestQualityFloor:
 
         decision = resolve("classification", "claude-sonnet-4-20250514", cache, policy)
 
-        # cheap-model has quality 0.6 < QUALITY_FLOOR (0.7), so it's excluded
+        # cheap-model has quality 0.25 < QUALITY_FLOOR (0.30), so it's excluded
         assert decision.selected_model == "claude-haiku-4-5-20251001"
 
     def test_quality_floor_constant_is_correct(self) -> None:
-        assert QUALITY_FLOOR == 0.7
+        assert QUALITY_FLOOR == 0.30
 
     def test_model_exactly_at_floor_is_included(self) -> None:
         entries = [
-            _make_entry("border-model", "classification", avg_quality=0.7, avg_cost=0.0001),
+            _make_entry("border-model", "classification", avg_quality=0.30, avg_cost=0.0001),
         ]
         cache = _make_cache(entries)
         policy = RoutingPolicy(
@@ -259,7 +259,7 @@ class TestQualityFloor:
                 RoutingRule(
                     task_type="classification",
                     criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
-                    min_quality=0.7,
+                    min_quality=0.30,
                     fallback="claude-haiku-4-5-20251001",
                 ),
             ]
