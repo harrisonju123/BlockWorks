@@ -50,6 +50,12 @@ class AgentProofConfig(BaseSettings):
         "openai.gpt-oss-120b-1:0",
     ]
     benchmark_judge_model: str = "claude-sonnet-4-6"
+    benchmark_smart_targeting: bool = True
+    benchmark_target_max: int = 6
+    benchmark_target_min_samples: int = 10
+
+    # Waste
+    waste_quality_threshold: float = 0.85
 
     # Routing
     routing_enabled: bool = True

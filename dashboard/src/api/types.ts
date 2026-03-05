@@ -57,6 +57,9 @@ export interface WasteBreakdownItem {
   projected_cost_usd: number;
   savings_usd: number;
   confidence: number;
+  suggestion_source?: "fitness" | "heuristic" | null;
+  quality_score?: number | null;
+  sample_size?: number | null;
 }
 
 export interface EventsResponse {

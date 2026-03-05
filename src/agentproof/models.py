@@ -17,6 +17,7 @@ class ModelInfo:
     cost_per_1k_input: float
     cost_per_1k_output: float
     downgrade_to: str | None = None
+    supports_tool_use: bool = True
 
     @property
     def avg_cost(self) -> float:
@@ -109,34 +110,40 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_input=0.002,
         cost_per_1k_output=0.01,
         downgrade_to="qwen.qwen3-next-80b-a3b",
+        supports_tool_use=False,
     ),
     "qwen.qwen3-next-80b-a3b": ModelInfo(
         tier=2,
         cost_per_1k_input=0.0012,
         cost_per_1k_output=0.006,
         downgrade_to="qwen.qwen3-coder-30b-a3b-v1:0",
+        supports_tool_use=False,
     ),
     "moonshot.kimi-k2-thinking": ModelInfo(
         tier=2,
         cost_per_1k_input=0.0006,
         cost_per_1k_output=0.0025,
         downgrade_to="moonshotai.kimi-k2.5",
+        supports_tool_use=False,
     ),
     "moonshotai.kimi-k2.5": ModelInfo(
         tier=2,
         cost_per_1k_input=0.0006,
         cost_per_1k_output=0.003,
+        supports_tool_use=False,
     ),
     "openai.gpt-oss-120b-1:0": ModelInfo(
         tier=2,
         cost_per_1k_input=0.00015,
         cost_per_1k_output=0.00069,
         downgrade_to="openai.gpt-oss-20b-1:0",
+        supports_tool_use=False,
     ),
     "minimax.minimax-m2.1": ModelInfo(
         tier=2,
         cost_per_1k_input=0.00027,
         cost_per_1k_output=0.00095,
+        supports_tool_use=False,
     ),
     # ── Tier 3: Haiku / mini / small open-source ────────────────────
     "claude-haiku-4-5-20251001": ModelInfo(
@@ -155,50 +162,59 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         tier=3,
         cost_per_1k_input=0.0003,
         cost_per_1k_output=0.0025,
+        supports_tool_use=False,
     ),
     "qwen.qwen3-coder-30b-a3b-v1:0": ModelInfo(
         tier=3,
         cost_per_1k_input=0.00022,
         cost_per_1k_output=0.001,
+        supports_tool_use=False,
     ),
     "openai.gpt-oss-20b-1:0": ModelInfo(
         tier=3,
         cost_per_1k_input=0.00003,
         cost_per_1k_output=0.00014,
+        supports_tool_use=False,
     ),
     "google.gemma-3-27b-it": ModelInfo(
         tier=3,
         cost_per_1k_input=0.00004,
         cost_per_1k_output=0.00015,
         downgrade_to="google.gemma-3-12b-it",
+        supports_tool_use=False,
     ),
     "google.gemma-3-12b-it": ModelInfo(
         tier=3,
         cost_per_1k_input=0.00004,
         cost_per_1k_output=0.00013,
         downgrade_to="google.gemma-3-4b-it",
+        supports_tool_use=False,
     ),
     "google.gemma-3-4b-it": ModelInfo(
         tier=3,
         cost_per_1k_input=0.00004,
         cost_per_1k_output=0.00008,
+        supports_tool_use=False,
     ),
     "mistral.ministral-3-14b-instruct": ModelInfo(
         tier=3,
         cost_per_1k_input=0.0002,
         cost_per_1k_output=0.0002,
         downgrade_to="mistral.ministral-3-8b-instruct",
+        supports_tool_use=False,
     ),
     "mistral.ministral-3-8b-instruct": ModelInfo(
         tier=3,
         cost_per_1k_input=0.00015,
         cost_per_1k_output=0.00015,
         downgrade_to="mistral.ministral-3-3b-instruct",
+        supports_tool_use=False,
     ),
     "mistral.ministral-3-3b-instruct": ModelInfo(
         tier=3,
         cost_per_1k_input=0.0001,
         cost_per_1k_output=0.0001,
+        supports_tool_use=False,
     ),
 }
 

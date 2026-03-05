@@ -17,6 +17,8 @@ from agentproof.api.routes.proxy import (
     _detect_framework_from_headers,
     _extract_trace_from_headers,
     _infer_provider,
+    _request_uses_tools,
+    _request_uses_tools_anthropic,
 )
 from agentproof.types import LLMEvent
 
@@ -455,3 +457,69 @@ class TestModelsPassthrough:
 
         assert resp.status_code == 200
         assert len(resp.json()["data"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# _request_uses_tools (OpenAI format)
+# ---------------------------------------------------------------------------
+
+class TestRequestUsesTools:
+    def test_tools_array_present(self):
+        body = {"tools": [{"type": "function", "function": {"name": "get_weather"}}], "messages": []}
+        assert _request_uses_tools(body) is True
+
+    def test_functions_array_present(self):
+        body = {"functions": [{"name": "get_weather"}], "messages": []}
+        assert _request_uses_tools(body) is True
+
+    def test_assistant_tool_calls_in_history(self):
+        body = {"messages": [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": None, "tool_calls": [{"function": {"name": "x"}}]},
+            {"role": "tool", "content": "result"},
+        ]}
+        assert _request_uses_tools(body) is True
+
+    def test_tool_role_in_history(self):
+        body = {"messages": [{"role": "tool", "content": "result"}]}
+        assert _request_uses_tools(body) is True
+
+    def test_no_tools(self):
+        body = {"messages": [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}]}
+        assert _request_uses_tools(body) is False
+
+    def test_empty_body(self):
+        assert _request_uses_tools({}) is False
+
+
+# ---------------------------------------------------------------------------
+# _request_uses_tools_anthropic (Anthropic format)
+# ---------------------------------------------------------------------------
+
+class TestRequestUsesToolsAnthropic:
+    def test_tools_array_present(self):
+        body = {"tools": [{"name": "get_weather"}], "messages": []}
+        assert _request_uses_tools_anthropic(body) is True
+
+    def test_tool_use_block_in_history(self):
+        body = {"messages": [
+            {"role": "assistant", "content": [{"type": "tool_use", "id": "x", "name": "get_weather", "input": {}}]},
+        ]}
+        assert _request_uses_tools_anthropic(body) is True
+
+    def test_tool_result_block_in_history(self):
+        body = {"messages": [
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "x", "content": "ok"}]},
+        ]}
+        assert _request_uses_tools_anthropic(body) is True
+
+    def test_no_tools(self):
+        body = {"messages": [{"role": "user", "content": "hello"}]}
+        assert _request_uses_tools_anthropic(body) is False
+
+    def test_string_content_no_tools(self):
+        body = {"messages": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hey"}]}
+        assert _request_uses_tools_anthropic(body) is False
+
+    def test_empty_body(self):
+        assert _request_uses_tools_anthropic({}) is False

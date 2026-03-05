@@ -1,75 +1,28 @@
-"""Waste score calculation — heuristic v0.
+"""Waste score calculation — thin wrapper around the unified suggestion engine.
 
 Determines what fraction of AI spend could be saved by routing tasks to
-cheaper models that are sufficient for the job.  The scoring rules here
-are deliberately conservative; Phase 1's benchmarking engine will let us
-tighten them with empirical data.
+cheaper models. Uses fitness matrix data when provided (empirical),
+falls back to tier-based heuristic with capped confidence when it doesn't.
 """
 
 from __future__ import annotations
 
 from agentproof.api.schemas import WasteBreakdownItem, WasteScoreResponse
-from agentproof.models import MODEL_CATALOG, get_tier
-from agentproof.types import TaskType
-
-# Pre-built str -> TaskType lookup for O(1) conversion instead of enum constructor scan
-_TASK_TYPE_MAP: dict[str, TaskType] = {t.value: t for t in TaskType}
-
-# Quick lookup: tier number -> cheapest model name in that tier.
-_CHEAPEST_BY_TIER: dict[int, str] = {}
-for _model, _info in MODEL_CATALOG.items():
-    if _info.tier not in _CHEAPEST_BY_TIER:
-        _CHEAPEST_BY_TIER[_info.tier] = _model
-    else:
-        existing = MODEL_CATALOG[_CHEAPEST_BY_TIER[_info.tier]]
-        if _info.avg_cost < existing.avg_cost:
-            _CHEAPEST_BY_TIER[_info.tier] = _model
-
-_SIMPLE_TASKS: set[TaskType] = {
-    TaskType.CLASSIFICATION,
-    TaskType.EXTRACTION,
-    TaskType.CONVERSATION,
-}
+from agentproof.benchmarking.types import FitnessEntry
+from agentproof.models import get_tier
+from agentproof.waste.suggest import suggest_alternative
 
 
-def _cost_ratio(current_model: str, suggested_model: str) -> float:
-    cur = MODEL_CATALOG[current_model]
-    sug = MODEL_CATALOG[suggested_model]
-    if cur.avg_cost == 0:
-        return 1.0
-    return sug.avg_cost / cur.avg_cost
+def compute_waste_score(
+    rows: list[dict],
+    fitness_entries: list[FitnessEntry] | None = None,
+) -> WasteScoreResponse:
+    """Turn raw (task_type, model) aggregates into a waste score.
 
-
-def _suggest_model(task_type: TaskType, current_tier: int) -> tuple[str | None, bool]:
-    """Decide whether a (task_type, tier) combo is wasteful.
-
-    Returns (suggested_model, is_flagged). None when not flagged.
+    When fitness_entries are provided, suggestions are backed by benchmark
+    data with evidence-based confidence. Without them, the tier-based
+    heuristic fires with confidence capped at 0.5.
     """
-    if task_type in _SIMPLE_TASKS:
-        if current_tier in (1, 2):
-            return _CHEAPEST_BY_TIER[3], True
-        return None, False
-
-    if task_type == TaskType.SUMMARIZATION:
-        if current_tier == 1:
-            return _CHEAPEST_BY_TIER[2], True
-        return None, False
-
-    if task_type in (TaskType.CODE_GENERATION, TaskType.CODE_REVIEW, TaskType.REASONING):
-        if current_tier == 1:
-            return _CHEAPEST_BY_TIER[2], True
-        return None, False
-
-    if task_type == TaskType.TOOL_SELECTION:
-        if current_tier == 1:
-            return _CHEAPEST_BY_TIER[3], True
-        return None, False
-
-    return None, False
-
-
-def compute_waste_score(rows: list[dict]) -> WasteScoreResponse:
-    """Turn raw (task_type, model) aggregates into a waste score."""
     if not rows:
         return WasteScoreResponse(
             waste_score=0.0,
@@ -92,31 +45,29 @@ def compute_waste_score(rows: list[dict]) -> WasteScoreResponse:
         if tier is None:
             continue
 
-        tt = _TASK_TYPE_MAP.get(task_type_str)
-        if tt is None:
+        suggestion = suggest_alternative(
+            task_type_str, model, fitness_entries,
+        )
+        if suggestion is None:
             continue
 
-        suggested_model, flagged = _suggest_model(tt, tier)
-        if not flagged or suggested_model is None:
-            continue
-
-        ratio = _cost_ratio(model, suggested_model)
-        projected = cost * ratio
+        projected = cost * suggestion.cost_ratio
         savings = cost - projected
         total_savings += savings
 
-        confidence = float(row["avg_confidence"]) if row.get("avg_confidence") else 0.5
-
         breakdown.append(
             WasteBreakdownItem(
-                task_type=tt,
+                task_type=task_type_str,
                 current_model=model,
-                suggested_model=suggested_model,
+                suggested_model=suggestion.suggested_model,
                 call_count=int(row["call_count"]),
                 current_cost_usd=round(cost, 6),
                 projected_cost_usd=round(projected, 6),
                 savings_usd=round(savings, 6),
-                confidence=round(confidence, 4),
+                confidence=suggestion.confidence,
+                suggestion_source=suggestion.source,
+                quality_score=suggestion.quality,
+                sample_size=suggestion.sample_size,
             )
         )
 

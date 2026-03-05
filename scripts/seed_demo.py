@@ -30,6 +30,7 @@ import uuid
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import asyncpg
 
@@ -42,7 +43,7 @@ from agentproof.attestation.hashing import (
 )
 from agentproof.attestation.types import AttestationMetrics, AttestationRecord, TraceEvaluation
 
-from agentproof.api.waste import _SIMPLE_TASKS as _SIMPLE_TASK_ENUMS
+from agentproof.waste.suggest import _SIMPLE_TASKS as _SIMPLE_TASK_ENUMS
 from agentproof.models import MODEL_CATALOG
 from agentproof.pipeline.writer import _EVENT_COLUMNS, _TOOL_CALL_COLUMNS
 from agentproof.types import EventStatus, TaskType
@@ -598,6 +599,46 @@ def generate_events(n: int = 50000) -> tuple[list[EventRow], list[tuple]]:
     return events, tool_call_rows
 
 
+# Load real benchmark distributions for quality score sampling
+_REAL_BENCHMARKS: dict | None = None
+_FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "real_benchmarks.json"
+
+
+def _load_real_benchmarks() -> dict:
+    global _REAL_BENCHMARKS
+    if _REAL_BENCHMARKS is not None:
+        return _REAL_BENCHMARKS
+    try:
+        with open(_FIXTURE_PATH) as f:
+            data = json.load(f)
+        _REAL_BENCHMARKS = data.get("distributions", {})
+    except (FileNotFoundError, json.JSONDecodeError):
+        _REAL_BENCHMARKS = {}
+    return _REAL_BENCHMARKS
+
+
+def _sample_quality(task_type: str, bench_tier: int, original_tier: int) -> float:
+    """Sample quality score with bounded noise to prevent tier inversions.
+
+    Uses ±0.03 uniform noise around the distribution mean instead of unbounded
+    Gaussian. This guarantees that tier 2 averages always beat tier 3 in seeded
+    demo data, which matches real-world expectations.
+    """
+    dists = _load_real_benchmarks()
+    tier_key = f"tier_{bench_tier}"
+    dist = dists.get(task_type, {}).get(tier_key)
+
+    if dist:
+        mean = dist["mean"]
+        noise = random.uniform(-0.03, 0.03)
+        return round(max(0.0, min(1.0, mean + noise)), 3)
+
+    # Fallback: tier-based ranges that don't overlap
+    base = {1: 0.92, 2: 0.86, 3: 0.74}.get(bench_tier, 0.80)
+    noise = random.uniform(-0.03, 0.03)
+    return round(max(0.0, min(1.0, base + noise)), 3)
+
+
 def generate_benchmark_results(events: list[EventRow], n: int = 8000) -> list[tuple]:
     """Generate benchmark_results: tier-aware model comparisons."""
     rows = []
@@ -627,15 +668,8 @@ def generate_benchmark_results(events: list[EventRow], n: int = 8000) -> list[tu
 
         bench_model = random.choice(candidates)
 
-        # Quality scores: cheaper models competitive on simple tasks
-        if event.task_type in _SIMPLE_TASKS and bench_model.tier == 3:
-            quality = round(random.uniform(0.75, 0.93), 3)
-        elif event.task_type in _SIMPLE_TASKS and bench_model.tier == 2:
-            quality = round(random.uniform(0.78, 0.96), 3)
-        elif bench_model.tier < original.tier:
-            quality = round(random.uniform(0.55, 0.85), 3)
-        else:
-            quality = round(random.uniform(0.60, 0.90), 3)
+        # Quality scores: sample from real benchmark distributions when available
+        quality = _sample_quality(event.task_type, bench_model.tier, original.tier)
 
         # Cost ratio based on actual model pricing
         if original.cost_in > 0:
@@ -656,7 +690,7 @@ def generate_benchmark_results(events: list[EventRow], n: int = 8000) -> list[tu
             round(bench_cost, 6),
             event.latency_ms,
             round(bench_latency, 1),
-            "claude-haiku-4-5-20251001",  # judge_model
+            "claude-sonnet-4-6",  # judge_model
             "v1",  # rubric_version
             event.org_id,
         ))

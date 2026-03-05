@@ -59,8 +59,8 @@ class TestBuildJudgePrompt:
             rubric=rubric,
         )
         assert "ORIGINAL PROMPT:" in prompt
-        assert "ORIGINAL COMPLETION:" in prompt
-        assert "BENCHMARK COMPLETION:" in prompt
+        assert "REFERENCE COMPLETION" in prompt
+        assert "BENCHMARK COMPLETION" in prompt
         assert "RUBRIC:" in prompt
         assert "code_generation" in prompt
 

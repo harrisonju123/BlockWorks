@@ -2,26 +2,24 @@
 
 Compares actual usage against the fitness matrix to find cases where
 an expensive model is used for a task where a cheaper model scores
-above the quality threshold. Dollar amounts come from real benchmark
-data rather than the v0 heuristic rules.
+above the quality threshold. Delegates model selection to the unified
+suggestion engine so recommendations stay consistent across the
+heuristic /waste-score and detailed /waste/details paths.
 """
 
 from __future__ import annotations
 
-from agentproof.models import MODEL_CATALOG, ModelInfo
+from agentproof.models import MODEL_CATALOG
 from agentproof.benchmarking.types import FitnessEntry
+from agentproof.waste.suggest import suggest_alternative
 from agentproof.waste.types import WasteCategory, WasteItem, WasteSeverity
-
-# Minimum quality threshold — a cheaper model must score above this
-# to be considered a viable replacement.
-_QUALITY_THRESHOLD = 0.90
 
 
 def detect_model_overkill(
     usage_rows: list[dict],
     fitness_entries: list[FitnessEntry],
     *,
-    quality_threshold: float = _QUALITY_THRESHOLD,
+    quality_threshold: float = 0.90,
 ) -> list[WasteItem]:
     """Find (task_type, model) pairs where a cheaper model would suffice.
 
@@ -36,11 +34,6 @@ def detect_model_overkill(
     """
     if not usage_rows or not fitness_entries:
         return []
-
-    # Build lookup: (task_type, model) -> FitnessEntry for quick comparison
-    fitness_by_task: dict[str, list[FitnessEntry]] = {}
-    for entry in fitness_entries:
-        fitness_by_task.setdefault(entry.task_type, []).append(entry)
 
     items: list[WasteItem] = []
 
@@ -57,30 +50,23 @@ def detect_model_overkill(
         if not current_cost_info:
             continue
 
-        # Look for a cheaper model that meets the quality bar
-        candidates = fitness_by_task.get(task_type, [])
-        best_alternative = _find_cheapest_qualified(
-            candidates, current_cost_info, quality_threshold
+        suggestion = suggest_alternative(
+            task_type, current_model, fitness_entries,
+            quality_threshold=quality_threshold,
         )
 
-        if best_alternative is None:
+        if suggestion is None or suggestion.source != "fitness":
+            # Detector only uses empirical data — heuristic handled by waste scorer
             continue
 
-        alt_cost_info = MODEL_CATALOG.get(best_alternative.model)
-        if not alt_cost_info:
-            continue
-
-        # Project savings based on cost ratio
-        if current_cost_info.avg_cost == 0:
-            continue
-        cost_ratio = alt_cost_info.avg_cost / current_cost_info.avg_cost
-        projected_cost = total_cost * cost_ratio
+        projected_cost = total_cost * suggestion.cost_ratio
         savings = total_cost - projected_cost
 
         if savings <= 0:
             continue
 
         severity = _classify_severity(savings)
+        quality_str = f"{suggestion.quality:.0%}" if suggestion.quality else "?"
 
         items.append(
             WasteItem(
@@ -92,42 +78,14 @@ def detect_model_overkill(
                 savings=round(savings, 6),
                 description=(
                     f"Switch {call_count:,} {task_type} calls from "
-                    f"{current_model} to {best_alternative.model} "
-                    f"(quality: {best_alternative.avg_quality:.0%})"
+                    f"{current_model} to {suggestion.suggested_model} "
+                    f"(quality: {quality_str})"
                 ),
-                confidence=round(min(best_alternative.avg_quality, 1.0), 4),
+                confidence=suggestion.confidence,
             )
         )
 
     return sorted(items, key=lambda i: i.savings, reverse=True)
-
-
-def _find_cheapest_qualified(
-    candidates: list[FitnessEntry],
-    current_cost: ModelInfo,
-    quality_threshold: float,
-) -> FitnessEntry | None:
-    """Pick the cheapest model that exceeds the quality bar and is cheaper than current."""
-    best: FitnessEntry | None = None
-    best_avg_cost: float = current_cost.avg_cost
-
-    for entry in candidates:
-        if entry.avg_quality < quality_threshold:
-            continue
-
-        alt_cost_info = MODEL_CATALOG.get(entry.model)
-        if not alt_cost_info:
-            continue
-
-        # Must actually be cheaper
-        if alt_cost_info.avg_cost >= current_cost.avg_cost:
-            continue
-
-        if alt_cost_info.avg_cost < best_avg_cost:
-            best = entry
-            best_avg_cost = alt_cost_info.avg_cost
-
-    return best
 
 
 def _classify_severity(savings: float) -> WasteSeverity:

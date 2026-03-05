@@ -13,7 +13,7 @@ import time
 from typing import Any
 
 from agentproof.benchmarking.types import FitnessEntry
-from agentproof.models import MODEL_CATALOG
+from agentproof.models import MODEL_CATALOG, ModelInfo
 from agentproof.routing.types import (
     QUALITY_FLOOR,
     RoutingDecision,
@@ -205,6 +205,8 @@ def resolve(
     requested_model: str,
     fitness_cache: FitnessCache,
     policy: RoutingPolicy,
+    *,
+    has_tool_use: bool = False,
 ) -> RoutingDecision:
     """Make a routing decision for the given task type and policy.
 
@@ -244,6 +246,14 @@ def resolve(
     # Filter by quality: enforce both the rule's min_quality and the global floor
     effective_min_quality = max(rule.min_quality, QUALITY_FLOOR)
     qualified = [c for c in candidates if c.avg_quality >= effective_min_quality]
+
+    # Exclude models that don't support tool use when the request has tools
+    if has_tool_use:
+        _DEFAULT_INFO = ModelInfo(tier=3, cost_per_1k_input=0, cost_per_1k_output=0)
+        qualified = [
+            c for c in qualified
+            if MODEL_CATALOG.get(c.model, _DEFAULT_INFO).supports_tool_use
+        ]
 
     best = _apply_criteria(rule, qualified)
 

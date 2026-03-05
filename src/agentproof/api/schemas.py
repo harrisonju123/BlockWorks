@@ -69,6 +69,9 @@ class WasteBreakdownItem(BaseModel):
     projected_cost_usd: float
     savings_usd: float
     confidence: float
+    suggestion_source: str | None = None
+    quality_score: float | None = None
+    sample_size: int | None = None
 
 
 class WasteScoreResponse(BaseModel):

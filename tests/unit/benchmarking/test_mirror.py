@@ -234,7 +234,7 @@ class TestBenchmarkConfig:
         assert config.sample_rate == 0.05
         assert "claude-haiku-4-5-20251001" in config.benchmark_models
         assert "gpt-4o-mini" in config.benchmark_models
-        assert config.judge_model == "claude-haiku-4-5-20251001"
+        assert config.judge_model == "claude-sonnet-4-6"
         assert len(config.enabled_task_types) == len(TaskType)
 
     def test_sample_rate_validation(self) -> None:

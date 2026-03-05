@@ -1,4 +1,4 @@
-.PHONY: dev dev-proxy down reset logs db-shell test test-unit test-integration lint fmt typecheck ci install claude claude-proxy forge-test deploy-local seed demo demo-traffic demo-check demo-reset
+.PHONY: dev dev-proxy down reset logs db-shell test test-unit test-integration lint fmt typecheck ci install claude claude-proxy forge-test deploy-local seed demo demo-traffic demo-check demo-reset benchmark benchmark-anthropic benchmark-estimate validate-fitness
 
 # Start full stack (DB + API + Dashboard)
 dev:
@@ -135,3 +135,19 @@ demo-traffic:
 install:
 	pip install -e ".[dev]"
 	cd dashboard && pnpm install
+
+# Run full benchmark eval set against all configured models
+benchmark:
+	docker compose exec -T api python /app/scripts/run_benchmarks.py
+
+# Run benchmarks for Anthropic models only (cheapest to validate pipeline)
+benchmark-anthropic:
+	docker compose exec -T api python /app/scripts/run_benchmarks.py --models claude-sonnet-4-6 claude-haiku-4-5-20251001
+
+# Dry run: show cost estimate without making API calls
+benchmark-estimate:
+	docker compose exec -T api python /app/scripts/run_benchmarks.py --dry-run
+
+# Validate fitness matrix after benchmark run
+validate-fitness:
+	docker compose exec -T api python /app/scripts/validate_fitness.py

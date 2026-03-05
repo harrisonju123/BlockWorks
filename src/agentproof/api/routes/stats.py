@@ -19,7 +19,7 @@ from agentproof.api.schemas import (
     WasteScoreResponse,
 )
 from agentproof.api.waste import compute_waste_score
-from agentproof.db.queries import get_summary_stats, get_timeseries, get_top_traces, get_waste_analysis
+from agentproof.db.queries import get_fitness_matrix, get_summary_stats, get_timeseries, get_top_traces, get_waste_analysis
 from agentproof.waste.analyzer import WasteAnalyzer
 
 router = APIRouter(prefix="/stats")
@@ -134,7 +134,8 @@ async def waste_score(
     """
     start, end = resolve_time_range(start, end)
     rows = await get_waste_analysis(db, start, end, org_id)
-    return compute_waste_score(rows)
+    fitness_entries = await get_fitness_matrix(db, org_id)
+    return compute_waste_score(rows, fitness_entries)
 
 
 @router.get("/waste/details", response_model=WasteReportResponse)

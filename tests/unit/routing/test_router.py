@@ -407,6 +407,78 @@ class TestEdgeCases:
         assert decision.was_overridden is False
 
 
+class TestToolUseFiltering:
+
+    def test_tool_use_excludes_unsupported_models(self) -> None:
+        """Models with supports_tool_use=False are excluded when has_tool_use=True."""
+        entries = [
+            _make_entry("claude-sonnet-4-20250514", "classification", avg_quality=0.93, avg_cost=0.003),
+            # Bedrock-backed model — supports_tool_use=False in MODEL_CATALOG
+            _make_entry("openai.gpt-oss-120b-1:0", "classification", avg_quality=0.92, avg_cost=0.00015),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+                    min_quality=0.9,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+
+        decision = resolve("classification", "claude-sonnet-4-20250514", cache, policy, has_tool_use=True)
+
+        # gpt-oss is cheapest but doesn't support tools — sonnet should win
+        assert decision.selected_model == "claude-sonnet-4-20250514"
+
+    def test_no_tool_use_keeps_unsupported_models(self) -> None:
+        """Without tool use, Bedrock-backed models are still valid candidates."""
+        entries = [
+            _make_entry("claude-sonnet-4-20250514", "classification", avg_quality=0.93, avg_cost=0.003),
+            _make_entry("openai.gpt-oss-120b-1:0", "classification", avg_quality=0.92, avg_cost=0.00015),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+                    min_quality=0.9,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+
+        decision = resolve("classification", "claude-sonnet-4-20250514", cache, policy, has_tool_use=False)
+
+        assert decision.selected_model == "openai.gpt-oss-120b-1:0"
+
+    def test_tool_use_all_filtered_falls_through_to_fallback(self) -> None:
+        """When all candidates lack tool support, fallback is used."""
+        entries = [
+            _make_entry("openai.gpt-oss-120b-1:0", "classification", avg_quality=0.92, avg_cost=0.00015),
+            _make_entry("google.gemma-3-27b-it", "classification", avg_quality=0.91, avg_cost=0.00004),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+                    min_quality=0.9,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+
+        decision = resolve("classification", "claude-sonnet-4-20250514", cache, policy, has_tool_use=True)
+
+        assert decision.selected_model == "claude-haiku-4-5-20251001"
+        assert "fallback" in decision.reason
+
+
 class TestFitnessCache:
 
     def test_cache_starts_empty(self) -> None:

@@ -1,0 +1,37 @@
+{
+  "_comment": "Placeholder — update with empirical data after running `make benchmark`. Values below are informed estimates.",
+  "distributions": {
+    "classification": {
+      "tier_2": {"mean": 0.91, "stddev": 0.04},
+      "tier_3": {"mean": 0.87, "stddev": 0.05}
+    },
+    "extraction": {
+      "tier_2": {"mean": 0.89, "stddev": 0.05},
+      "tier_3": {"mean": 0.84, "stddev": 0.06}
+    },
+    "conversation": {
+      "tier_2": {"mean": 0.90, "stddev": 0.04},
+      "tier_3": {"mean": 0.86, "stddev": 0.05}
+    },
+    "summarization": {
+      "tier_2": {"mean": 0.88, "stddev": 0.05},
+      "tier_3": {"mean": 0.82, "stddev": 0.06}
+    },
+    "tool_selection": {
+      "tier_2": {"mean": 0.87, "stddev": 0.06},
+      "tier_3": {"mean": 0.80, "stddev": 0.07}
+    },
+    "code_generation": {
+      "tier_2": {"mean": 0.85, "stddev": 0.06},
+      "tier_3": {"mean": 0.72, "stddev": 0.08}
+    },
+    "code_review": {
+      "tier_2": {"mean": 0.84, "stddev": 0.06},
+      "tier_3": {"mean": 0.70, "stddev": 0.09}
+    },
+    "reasoning": {
+      "tier_2": {"mean": 0.86, "stddev": 0.05},
+      "tier_3": {"mean": 0.73, "stddev": 0.08}
+    }
+  }
+}

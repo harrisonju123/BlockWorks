@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agentproof.api.waste import compute_waste_score
+from agentproof.benchmarking.types import FitnessEntry
 from agentproof.models import MODEL_CATALOG as MODEL_COST_TIERS
 from agentproof.types import TaskType
 
@@ -24,6 +25,22 @@ def _row(
         "total_cost": total_cost,
         "avg_confidence": avg_confidence,
     }
+
+
+def _fitness(
+    task_type: str = "classification",
+    model: str = "claude-haiku-4-5-20251001",
+    avg_quality: float = 0.95,
+    sample_size: int = 50,
+) -> FitnessEntry:
+    return FitnessEntry(
+        task_type=task_type,
+        model=model,
+        avg_quality=avg_quality,
+        avg_cost=0.001,
+        avg_latency=200.0,
+        sample_size=sample_size,
+    )
 
 
 class TestWasteScoreBasics:
@@ -170,7 +187,8 @@ class TestUnknownModelsAndTaskTypes:
         result = compute_waste_score(rows)
         assert result.breakdown == []
 
-    def test_confidence_defaults_to_half_when_null(self) -> None:
+    def test_confidence_defaults_to_half_when_no_fitness(self) -> None:
+        """Without fitness data, heuristic confidence is capped at 0.5."""
         rows = [
             _row(
                 TaskType.CLASSIFICATION.value,
@@ -194,3 +212,46 @@ class TestBreakdownSorting:
         result = compute_waste_score(rows)
         savings_values = [item.savings_usd for item in result.breakdown]
         assert savings_values == sorted(savings_values, reverse=True)
+
+
+class TestFitnessAwarePath:
+    """Tests for compute_waste_score with fitness_entries provided."""
+
+    def test_backward_compatible_without_fitness(self) -> None:
+        """compute_waste_score(rows) still works — no fitness = heuristic fallback."""
+        rows = [_row(TaskType.CLASSIFICATION.value, "claude-opus-4-20250514", total_cost=100.0)]
+        result = compute_waste_score(rows)
+        assert len(result.breakdown) == 1
+        assert result.breakdown[0].suggestion_source == "heuristic"
+        assert result.breakdown[0].confidence == 0.5
+
+    def test_uses_fitness_data_when_provided(self) -> None:
+        rows = [_row(TaskType.CLASSIFICATION.value, "claude-opus-4-20250514", total_cost=100.0)]
+        fitness = [_fitness(task_type="classification", avg_quality=0.95, sample_size=40)]
+        result = compute_waste_score(rows, fitness)
+        assert len(result.breakdown) == 1
+        item = result.breakdown[0]
+        assert item.suggestion_source == "fitness"
+        assert item.quality_score == pytest.approx(0.95)
+        assert item.sample_size == 40
+        assert item.confidence > 0.5
+
+    def test_fitness_gives_higher_confidence_than_heuristic(self) -> None:
+        rows = [_row(TaskType.CLASSIFICATION.value, "claude-opus-4-20250514", total_cost=100.0)]
+
+        heuristic_result = compute_waste_score(rows)
+        fitness_result = compute_waste_score(
+            rows, [_fitness(avg_quality=0.99, sample_size=100)],
+        )
+
+        h_conf = heuristic_result.breakdown[0].confidence
+        f_conf = fitness_result.breakdown[0].confidence
+        assert f_conf > h_conf
+
+    def test_new_fields_default_to_none_without_fitness(self) -> None:
+        rows = [_row(TaskType.CLASSIFICATION.value, "claude-opus-4-20250514", total_cost=100.0)]
+        result = compute_waste_score(rows)
+        item = result.breakdown[0]
+        assert item.suggestion_source == "heuristic"
+        assert item.quality_score is None
+        assert item.sample_size == 0

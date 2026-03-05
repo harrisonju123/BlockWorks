@@ -47,11 +47,16 @@ logger = logging.getLogger(__name__)
 
 
 async def _refresh_fitness_cache(app: FastAPI, interval_s: int) -> None:
-    """Periodically refresh the FitnessCache by merging synthetic base + real DB entries."""
+    """Periodically refresh the FitnessCache by merging synthetic base + real DB entries.
+
+    When smart targeting is enabled, also recomputes which models need
+    benchmarking and hot-reloads the benchmark worker config.
+    """
     while True:
         try:
             await asyncio.sleep(interval_s)
             from agentproof.api.deps import get_async_session
+            cfg = get_config()
             async with get_async_session() as session:
                 db_entries = await get_fitness_matrix(session, org_id=None)
             synthetic = generate_synthetic_fitness()
@@ -64,6 +69,29 @@ async def _refresh_fitness_cache(app: FastAPI, interval_s: int) -> None:
             if policy is not None and policy.version == 0:
                 app.state.routing_policy = default_policy(fitness_cache=cache)
             logger.debug("FitnessCache refreshed: %d merged entries", len(merged))
+
+            # Smart targeting: recompute which models need benchmarking
+            bench_config = getattr(app.state, "benchmark_config", None)
+            if cfg.benchmark_smart_targeting and bench_config is not None:
+                from agentproof.benchmarking.targeting import compute_benchmark_targets
+                from agentproof.db.queries import get_waste_analysis
+                from agentproof.utils import utcnow
+                from datetime import timedelta
+
+                now = utcnow()
+                async with get_async_session() as session:
+                    usage_rows = await get_waste_analysis(
+                        session, now - timedelta(days=7), now, org_id=None,
+                    )
+                targets = compute_benchmark_targets(
+                    usage_rows,
+                    db_entries,
+                    max_targets=cfg.benchmark_target_max,
+                    min_sample_size=cfg.benchmark_target_min_samples,
+                )
+                if targets:
+                    bench_config.benchmark_models = targets
+                    logger.info("Smart targeting updated: %s", targets)
         except asyncio.CancelledError:
             break
         except Exception:

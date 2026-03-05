@@ -6,12 +6,15 @@ and provides actionable recommendations with dollar amounts.
 """
 
 from agentproof.waste.analyzer import WasteAnalyzer
+from agentproof.waste.suggest import Suggestion, suggest_alternative
 from agentproof.waste.types import WasteCategory, WasteItem, WasteReport, WasteSeverity
 
 __all__ = [
+    "Suggestion",
     "WasteAnalyzer",
     "WasteCategory",
     "WasteItem",
     "WasteReport",
     "WasteSeverity",
+    "suggest_alternative",
 ]

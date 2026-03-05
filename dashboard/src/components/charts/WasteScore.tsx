@@ -20,7 +20,13 @@ function scoreLabel(score: number): string {
   return "High waste";
 }
 
-function confidenceBadge(confidence: number): { label: string; className: string } {
+function confidenceBadge(
+  confidence: number,
+  source?: "fitness" | "heuristic" | null,
+): { label: string; className: string } {
+  if (source === "heuristic") {
+    return { label: "est", className: "bg-gray-800 text-gray-400 border-gray-700" };
+  }
   if (confidence >= 0.8) return { label: "high", className: "bg-green-900/40 text-green-400 border-green-700/40" };
   if (confidence >= 0.5) return { label: "med", className: "bg-amber-900/40 text-amber-400 border-amber-700/40" };
   return { label: "low", className: "bg-gray-800 text-gray-400 border-gray-700" };
@@ -110,7 +116,7 @@ export function WasteScore({ timeRange }: Props) {
             </p>
             <ul className="space-y-1.5">
               {data!.breakdown.slice(0, 4).map((item, i) => {
-                const badge = confidenceBadge(item.confidence);
+                const badge = confidenceBadge(item.confidence, item.suggestion_source);
                 return (
                   <li key={i} className="flex items-center justify-between text-xs gap-2">
                     <span className="text-gray-400 truncate flex-1 min-w-0">

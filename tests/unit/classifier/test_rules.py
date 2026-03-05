@@ -82,8 +82,9 @@ class TestExtractKeywordsWordBoundary:
         assert "class" not in result
 
     def test_help_does_not_match_helpful(self):
-        result = extract_keywords("This is a helpful assistant")
-        assert "help" not in result
+        result = extract_keywords("This is a helpful assistant, let's chat")
+        assert "chat" in result
+        assert "have a conversation" not in result
 
     def test_multiword_keywords_still_match(self):
         result = extract_keywords("please write code for me")
@@ -91,12 +92,12 @@ class TestExtractKeywordsWordBoundary:
 
     def test_exact_single_word_still_matches(self):
         """Exact word occurrence must still be detected."""
-        result = extract_keywords("define a class for the model")
-        assert "class" in result
+        result = extract_keywords("please audit this module")
+        assert "audit" in result
 
-    def test_help_exact_word_matches(self):
-        result = extract_keywords("I need help with this task")
-        assert "help" in result
+    def test_multiword_code_generation_matches(self):
+        result = extract_keywords("please write a function to sort data")
+        assert "write a function" in result
 
 
 class TestCodeReviewClassification:
@@ -123,7 +124,7 @@ class TestCodeReviewClassification:
     def test_review_beats_codegen_with_code_fence(self):
         """When review + codegen keywords coexist with user intent, CODE_REVIEW wins."""
         inp = _make_input(
-            system_prompt_keywords=["code review", "function", "class"],
+            system_prompt_keywords=["code review", "write code"],
             user_prompt_keywords=["review this code"],
             has_code_fence_in_system=True,
         )
@@ -133,7 +134,7 @@ class TestCodeReviewClassification:
     def test_pure_codegen_unaffected(self):
         """No review keywords → CODE_GENERATION unchanged."""
         inp = _make_input(
-            system_prompt_keywords=["implement", "function"],
+            user_prompt_keywords=["write code", "write a function"],
             has_code_fence_in_system=True,
         )
         result = classify(inp)
@@ -143,7 +144,7 @@ class TestCodeReviewClassification:
         """Single-word 'audit' triggers CODE_REVIEW."""
         result = extract_keywords("please audit this module")
         assert "audit" in result
-        inp = _make_input(system_prompt_keywords=["audit"])
+        inp = _make_input(user_prompt_keywords=["audit"])
         result = classify(inp)
         assert result.task_type == TaskType.CODE_REVIEW
 

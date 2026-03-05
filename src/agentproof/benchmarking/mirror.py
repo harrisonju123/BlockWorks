@@ -98,10 +98,13 @@ async def _replay_prompt(
     messages: list[dict],
     model: str,
     system_prompt: str | list | None = None,
+    api_base: str | None = None,
 ) -> tuple[str, float, float]:
     """Send the original messages to a benchmark model.
 
     Converts Anthropic-format messages to OpenAI format before calling litellm.
+    If api_base is provided, routes through a LiteLLM proxy instead of hitting
+    providers directly.
     Returns (completion_text, cost_usd, latency_ms).
     """
     replay_messages = messages
@@ -119,12 +122,16 @@ async def _replay_prompt(
 
     replay_messages = _strip_tool_messages(replay_messages)
 
+    kwargs: dict = {
+        "model": model,
+        "messages": replay_messages,
+        "temperature": 0.0,
+    }
+    if api_base:
+        kwargs["api_base"] = api_base
+
     start = time.monotonic()
-    response = await litellm.acompletion(
-        model=model,
-        messages=replay_messages,
-        temperature=0.0,
-    )
+    response = await litellm.acompletion(**kwargs)
     elapsed_ms = (time.monotonic() - start) * 1000.0
 
     completion = response.choices[0].message.content or ""

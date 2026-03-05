@@ -21,8 +21,11 @@ TASK_KEYWORDS: dict[TaskType, list[str]] = {
         "extract", "parse", "pull out", "find all", "list the",
     ],
     TaskType.CODE_GENERATION: [
-        "write code", "implement", "function", "class", "refactor",
-        "generate code", "create a script",
+        "write code", "write a function", "write a class",
+        "implement a", "implement the", "implement this",
+        "generate code", "create a script", "code this",
+        "build a function", "build a class", "refactor this",
+        "write a program", "write a module",
     ],
     TaskType.CODE_REVIEW: [
         "code review", "review code", "review this code", "review this diff",
@@ -31,11 +34,13 @@ TASK_KEYWORDS: dict[TaskType, list[str]] = {
         "security review", "peer review",
     ],
     TaskType.REASONING: [
-        "explain", "why", "reason", "analyze", "think step",
-        "chain of thought", "let's think",
+        "explain why", "explain how", "reason about", "analyze this",
+        "think step", "chain of thought", "let's think",
+        "reason through", "walk me through",
     ],
     TaskType.CONVERSATION: [
-        "chat", "converse", "assistant", "dialogue", "help",
+        "chat", "converse", "have a conversation", "dialogue",
+        "just talk", "casual conversation",
     ],
     TaskType.TOOL_SELECTION: [
         "select tool", "pick tool", "choose function", "use tool",
@@ -114,12 +119,13 @@ def classify(task_input: ClassifierInput) -> ClassificationResult:
         scores[TaskType.CODE_GENERATION] += 0.2
         scores[TaskType.REASONING] += 0.2
 
-    # Signal: keyword matching from system prompt
+    # Signal: keyword matching from system prompt (low weight — system
+    # prompts for coding assistants are full of generic code terms)
     for task_type, keywords in TASK_KEYWORDS.items():
         matched = [kw for kw in keywords if kw in task_input.system_prompt_keywords]
         if matched:
             signals.append(f"keywords_{task_type.value}:{','.join(matched)}")
-            scores[task_type] += 0.4 * len(matched)
+            scores[task_type] += 0.15 * len(matched)
 
     # Signal: keyword matching from user prompt (stronger — direct intent)
     for task_type, keywords in TASK_KEYWORDS.items():

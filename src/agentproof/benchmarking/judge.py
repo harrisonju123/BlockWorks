@@ -234,7 +234,9 @@ def _build_judge_prompt(
     )
     criteria_names = [c.name for c in rubric.criteria]
 
-    return f"""You are an expert evaluator. Score the BENCHMARK completion against the ORIGINAL completion using the rubric below.
+    return f"""You are an expert evaluator. Score the BENCHMARK completion on its own merits using the rubric below.
+
+A REFERENCE completion from a stronger model is provided for calibration — it shows what a high-quality response looks like. Do NOT penalize the benchmark for taking a different approach, structure, or level of detail. Only penalize for genuinely lower quality: missed issues, incorrect information, or incomplete coverage.
 
 TASK TYPE: {rubric.task_type.value}
 
@@ -244,13 +246,14 @@ RUBRIC:
 ORIGINAL PROMPT:
 {original_prompt}
 
-ORIGINAL COMPLETION:
+REFERENCE COMPLETION (calibration only):
 {original_completion}
 
-BENCHMARK COMPLETION:
+BENCHMARK COMPLETION (score this):
 {benchmark_completion}
 
-Return ONLY a JSON object with scores for each criterion. Each score must be a float between 0.0 and 1.0.
+Score each criterion based on the absolute quality of the BENCHMARK COMPLETION, not its similarity to the reference. Each score must be a float between 0.0 and 1.0.
+Return ONLY a JSON object.
 Example format: {json.dumps({name: 0.85 for name in criteria_names})}
 
 JSON:"""
@@ -299,6 +302,7 @@ async def evaluate(
     benchmark_completion: str,
     task_type: TaskType,
     judge_model: str = "claude-sonnet-4-6",
+    api_base: str | None = None,
 ) -> tuple[float, str]:
     """Score a benchmark completion against the original using the LLM-as-judge.
 
@@ -315,12 +319,16 @@ async def evaluate(
         original_prompt, original_completion, benchmark_completion, rubric
     )
 
-    response = await litellm.acompletion(
-        model=judge_model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.0,
-        max_tokens=256,
-    )
+    kwargs: dict = {
+        "model": judge_model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.0,
+        "max_tokens": 256,
+    }
+    if api_base:
+        kwargs["api_base"] = api_base
+
+    response = await litellm.acompletion(**kwargs)
 
     response_text = response.choices[0].message.content or ""
     scores = _parse_judge_response(response_text, rubric)

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS benchmark_config (
     sample_rate         DOUBLE PRECISION NOT NULL DEFAULT 0.05
                         CHECK (sample_rate >= 0.0 AND sample_rate <= 1.0),
     benchmark_models    TEXT[] NOT NULL DEFAULT ARRAY['claude-haiku-4-5-20251001', 'gpt-4o-mini'],
-    judge_model         TEXT NOT NULL DEFAULT 'claude-haiku-4-5-20251001',
+    judge_model         TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
     enabled_task_types  TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

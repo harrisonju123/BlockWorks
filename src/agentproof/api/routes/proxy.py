@@ -134,8 +134,36 @@ def _enqueue(
                     logger.warning("Benchmark queue full — skipping event %s", event.id)
 
 
+def _request_uses_tools(body: dict) -> bool:
+    """Detect tool use in an OpenAI-format request (tools array or history)."""
+    if body.get("tools") or body.get("functions"):
+        return True
+    for msg in body.get("messages", []):
+        if not isinstance(msg, dict):
+            continue
+        if msg.get("role") == "tool":
+            return True
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            return True
+    return False
+
+
+def _request_uses_tools_anthropic(body: dict) -> bool:
+    """Detect tool use in an Anthropic-format request (tools array or history)."""
+    if body.get("tools"):
+        return True
+    for msg in body.get("messages", []):
+        if not isinstance(msg, dict):
+            continue
+        for block in msg.get("content", []):
+            if isinstance(block, dict) and block.get("type") in ("tool_use", "tool_result"):
+                return True
+    return False
+
+
 def _maybe_route(
     request: Request, body: dict, model: str, classify_fn: Callable[..., tuple[TaskType | None, float | None, str | None]],
+    *, has_tool_use: bool = False,
 ) -> tuple[str, RoutingDecision | None, tuple[TaskType | None, float | None, str | None]]:
     """Pre-classify and resolve routing if enabled.
 
@@ -167,6 +195,7 @@ def _maybe_route(
         requested_model=model,
         fitness_cache=fitness_cache,
         policy=policy,
+        has_tool_use=has_tool_use,
     )
 
     # Record decision in the in-memory buffer for the dashboard feed
@@ -515,7 +544,10 @@ async def proxy_chat_completions(request: Request) -> JSONResponse | StreamingRe
     model = body.get("model", "unknown")
 
     # Routing: potentially override the model before forwarding
-    routed_model, _, _ = _maybe_route(request, body, model, _classify_request)
+    routed_model, _, _ = _maybe_route(
+        request, body, model, _classify_request,
+        has_tool_use=_request_uses_tools(body),
+    )
     if routed_model != model:
         body["model"] = routed_model
         model = routed_model
@@ -762,7 +794,10 @@ async def proxy_messages(request: Request) -> JSONResponse | StreamingResponse:
     query_string = str(request.url.query)
 
     # Routing: potentially override the model before forwarding
-    routed_model, _, _ = _maybe_route(request, body, model, _classify_anthropic_request)
+    routed_model, _, _ = _maybe_route(
+        request, body, model, _classify_anthropic_request,
+        has_tool_use=_request_uses_tools_anthropic(body),
+    )
     if routed_model != model:
         body["model"] = routed_model
         model = routed_model
