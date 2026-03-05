@@ -37,7 +37,8 @@ from blockthrough.pipeline.context import FRAMEWORK_HINTS
 from blockthrough.pipeline.hasher import hash_content
 from blockthrough.api.routes.routing import record_decision
 from blockthrough.routing.router import FitnessCache, resolve
-from blockthrough.routing.sanitize import sanitize_for_target
+from blockthrough.routing.convert import anthropic_to_openai_request, openai_to_anthropic_response
+from blockthrough.routing.sanitize import repair_tool_pairing, sanitize_for_target
 from blockthrough.routing.types import RoutingDecision
 from blockthrough.routing.writer import DecisionRecord
 from blockthrough.types import EventStatus, LLMEvent, TaskType, ToolCallRecord
@@ -149,6 +150,40 @@ def _request_uses_tools(body: dict) -> bool:
     return False
 
 
+_PLAN_MODE_MARKERS = ("Plan mode is active", "Plan mode still active")
+
+
+def _is_plan_mode(body: dict) -> bool:
+    """Detect Claude Code plan mode from system prompt content."""
+    for msg in body.get("messages", []):
+        if isinstance(msg, dict) and msg.get("role") == "system":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                return any(marker in content for marker in _PLAN_MODE_MARKERS)
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text", "")
+                        if any(marker in text for marker in _PLAN_MODE_MARKERS):
+                            return True
+            return False  # Only check first system message
+    return False
+
+
+def _is_plan_mode_anthropic(body: dict) -> bool:
+    """Detect Claude Code plan mode from Anthropic-format system field."""
+    system = body.get("system", "")
+    if isinstance(system, str):
+        return any(marker in system for marker in _PLAN_MODE_MARKERS)
+    if isinstance(system, list):
+        for block in system:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if any(marker in text for marker in _PLAN_MODE_MARKERS):
+                    return True
+    return False
+
+
 def _request_uses_tools_anthropic(body: dict) -> bool:
     """Detect tool use in an Anthropic-format request (tools array or history)."""
     if body.get("tools"):
@@ -176,6 +211,10 @@ def _maybe_route(
     forced = request.headers.get("x-force-model")
     if forced:
         return forced, None, (None, None, None)
+
+    # Plan mode → force Opus for strongest reasoning
+    if _is_plan_mode(body) or _is_plan_mode_anthropic(body):
+        return "claude-opus-4-6", None, (None, None, None)
 
     routing_enabled: bool = getattr(request.app.state, "routing_enabled", False)
     if not routing_enabled:
@@ -556,6 +595,8 @@ async def proxy_chat_completions(request: Request) -> JSONResponse | StreamingRe
         model = routed_model
         sanitize_for_target(body, source_model=original_model, target_model=routed_model)
 
+    repair_tool_pairing(body)
+
     if body.get("stream", False):
         return await _handle_streaming(
             client, body, headers, request,
@@ -815,6 +856,25 @@ async def proxy_messages(request: Request) -> JSONResponse | StreamingResponse:
         model = routed_model
         sanitize_for_target(body, source_model=original_model, target_model=routed_model)
 
+    # Always repair tool pairing — even without routing override, LiteLLM
+    # may route to OpenAI via model groups, which rejects orphaned tool_calls
+    repair_tool_pairing(body)
+
+    # Non-Anthropic models: convert to OpenAI format and use /v1/chat/completions
+    # to bypass LiteLLM's broken Anthropic→OpenAI message translator
+    target_provider = infer_provider(model)
+    if target_provider != "anthropic":
+        openai_client: httpx.AsyncClient = request.app.state.http_client
+        if body.get("stream", False):
+            return await _handle_messages_via_openai_streaming(
+                openai_client, body, headers, request,
+                trace_id, framework, started_at, mono_start, model,
+            )
+        return await _handle_messages_via_openai(
+            openai_client, body, headers, request,
+            trace_id, framework, started_at, mono_start, model,
+        )
+
     if body.get("stream", False):
         return await _handle_messages_streaming(
             client, body, headers, query_string, request,
@@ -1006,6 +1066,232 @@ async def _handle_messages_streaming(
             )
             queue: asyncio.Queue[LLMEvent] = request.app.state.event_queue
             _enqueue(queue, event, request=request, messages=body.get("messages", []), completion=acc.full_content, system_prompt=body.get("system"))
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        status_code=upstream_resp.status_code,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Anthropic /v1/messages → OpenAI /v1/chat/completions bridge
+#
+# When a /v1/messages request targets a non-Anthropic model, we convert the
+# messages ourselves and route through /v1/chat/completions, then convert
+# the response back to Anthropic format.  This bypasses LiteLLM's broken
+# Anthropic→OpenAI message translator which mangles tool_use/tool_result.
+# ---------------------------------------------------------------------------
+
+async def _handle_messages_via_openai(
+    client: httpx.AsyncClient,
+    anthropic_body: dict,
+    headers: dict[str, str],
+    request: Request,
+    trace_id: str,
+    framework: str | None,
+    started_at: datetime,
+    mono_start: float,
+    model: str,
+) -> JSONResponse:
+    openai_body = anthropic_to_openai_request(anthropic_body)
+    resp = await client.post("/v1/chat/completions", json=openai_body, headers=headers)
+    latency_ms = (time.monotonic() - mono_start) * 1000
+
+    status_code = resp.status_code
+    try:
+        data = resp.json()
+    except Exception:
+        logger.warning("Failed to parse JSON from OpenAI upstream (status=%d)", status_code)
+        data = {}
+
+    # Convert response back to Anthropic format for Claude Code
+    if 200 <= status_code < 300:
+        anthropic_resp = openai_to_anthropic_response(data, model=model)
+    else:
+        err = data.get("error", {})
+        anthropic_resp = {
+            "type": "error",
+            "error": {
+                "type": err.get("type", f"http_{status_code}"),
+                "message": err.get("message", "Unknown error"),
+            },
+        }
+
+    # Capture event
+    event_status = EventStatus.SUCCESS if 200 <= status_code < 300 else EventStatus.FAILURE
+    usage = data.get("usage", {})
+    prompt_tokens = usage.get("prompt_tokens", 0) or 0
+    completion_tokens = usage.get("completion_tokens", 0) or 0
+
+    completion_content = ""
+    tool_calls: list[ToolCallRecord] = []
+    for choice in data.get("choices", []):
+        msg = choice.get("message", {})
+        completion_content = msg.get("content") or ""
+        for tc in msg.get("tool_calls", []):
+            fn = tc.get("function", {})
+            tool_calls.append(ToolCallRecord(
+                tool_name=fn.get("name", "unknown"),
+                args_hash=hash_content(fn.get("arguments", "")),
+            ))
+        break
+
+    task_type, task_confidence, sys_hash = _classify_anthropic_request(
+        anthropic_body, prompt_tokens, completion_tokens,
+    )
+
+    error_type = None
+    error_message_hash = None
+    if event_status == EventStatus.FAILURE:
+        err = data.get("error", {})
+        error_type = err.get("type") or f"http_{status_code}"
+        error_message_hash = hash_content(err.get("message", ""))
+
+    event = _build_event(
+        started_at=started_at,
+        model=data.get("model", model),
+        provider=_infer_provider(model),
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        latency_ms=latency_ms,
+        body=anthropic_body,
+        completion_content=completion_content,
+        sys_hash=sys_hash,
+        trace_id=trace_id,
+        framework=framework,
+        tool_calls=tool_calls,
+        task_type=task_type,
+        task_confidence=task_confidence,
+        response_id=data.get("id"),
+        error_type=error_type,
+        error_hash=error_message_hash,
+    )
+    queue: asyncio.Queue[LLMEvent] = request.app.state.event_queue
+    _enqueue(queue, event, request=request, messages=anthropic_body.get("messages", []),
+             completion=completion_content, system_prompt=anthropic_body.get("system"))
+
+    return JSONResponse(content=anthropic_resp, status_code=status_code)
+
+
+async def _handle_messages_via_openai_streaming(
+    client: httpx.AsyncClient,
+    anthropic_body: dict,
+    headers: dict[str, str],
+    request: Request,
+    trace_id: str,
+    framework: str | None,
+    started_at: datetime,
+    mono_start: float,
+    model: str,
+) -> StreamingResponse:
+    openai_body = anthropic_to_openai_request(anthropic_body)
+    openai_body["stream"] = True
+    openai_body.setdefault("stream_options", {})["include_usage"] = True
+
+    upstream_req = client.build_request(
+        "POST", "/v1/chat/completions", json=openai_body, headers=headers,
+    )
+    upstream_resp = await client.send(upstream_req, stream=True)
+
+    acc = _StreamAccumulator()
+    stream_error: Exception | None = None
+    block_idx = 0
+
+    async def _generate():
+        nonlocal stream_error, block_idx
+
+        # Anthropic stream preamble
+        msg_id = f"msg_{uuid.uuid4().hex[:24]}"
+        yield f"event: message_start\ndata: {json.dumps({'type': 'message_start', 'message': {'id': msg_id, 'type': 'message', 'role': 'assistant', 'model': model, 'content': [], 'stop_reason': None, 'stop_sequence': None, 'usage': {'input_tokens': 0, 'output_tokens': 0}}})}\n\n"
+
+        text_block_started = False
+        try:
+            async for line in upstream_resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                payload = line[6:].strip()
+                if payload == "[DONE]":
+                    continue
+                try:
+                    chunk = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+
+                elapsed = (time.monotonic() - mono_start) * 1000
+                acc.feed_chunk(chunk, elapsed)
+
+                # Convert OpenAI deltas → Anthropic SSE events
+                for choice in chunk.get("choices", []):
+                    delta = choice.get("delta", {})
+
+                    text = delta.get("content")
+                    if text:
+                        if not text_block_started:
+                            yield f"event: content_block_start\ndata: {json.dumps({'type': 'content_block_start', 'index': block_idx, 'content_block': {'type': 'text', 'text': ''}})}\n\n"
+                            text_block_started = True
+                        yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': block_idx, 'delta': {'type': 'text_delta', 'text': text}})}\n\n"
+
+                    for tc_delta in delta.get("tool_calls", []):
+                        fn = tc_delta.get("function", {})
+                        if fn.get("name"):
+                            if text_block_started:
+                                yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': block_idx})}\n\n"
+                                block_idx += 1
+                                text_block_started = False
+                            tc_id = tc_delta.get("id", f"toolu_{uuid.uuid4().hex[:24]}")
+                            yield f"event: content_block_start\ndata: {json.dumps({'type': 'content_block_start', 'index': block_idx, 'content_block': {'type': 'tool_use', 'id': tc_id, 'name': fn['name'], 'input': {}}})}\n\n"
+                        if fn.get("arguments"):
+                            yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': block_idx, 'delta': {'type': 'input_json_delta', 'partial_json': fn['arguments']}})}\n\n"
+
+                    finish = choice.get("finish_reason")
+                    if finish:
+                        if text_block_started or block_idx > 0 or acc.tool_calls_by_index:
+                            yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': block_idx})}\n\n"
+
+                usage = chunk.get("usage")
+                if usage:
+                    stop = "tool_use" if acc.tool_calls_by_index else "end_turn"
+                    yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': stop, 'stop_sequence': None}, 'usage': {'output_tokens': usage.get('completion_tokens', 0) or 0}})}\n\n"
+
+        except Exception as exc:
+            stream_error = exc
+            logger.warning("Upstream stream failed: %s", exc)
+        finally:
+            await upstream_resp.aclose()
+
+            yield f"event: message_stop\ndata: {json.dumps({'type': 'message_stop'})}\n\n"
+
+            latency_ms = (time.monotonic() - mono_start) * 1000
+            resolved_model = acc.model or model
+            task_type, task_confidence, sys_hash = _classify_anthropic_request(
+                anthropic_body, acc.prompt_tokens, acc.completion_tokens,
+            )
+
+            status = EventStatus.FAILURE if stream_error else EventStatus.SUCCESS
+            event = _build_event(
+                started_at=started_at,
+                model=resolved_model,
+                provider=_infer_provider(resolved_model),
+                prompt_tokens=acc.prompt_tokens,
+                completion_tokens=acc.completion_tokens,
+                latency_ms=latency_ms,
+                body=anthropic_body,
+                completion_content=acc.full_content,
+                sys_hash=sys_hash,
+                trace_id=trace_id,
+                framework=framework,
+                tool_calls=acc.tool_call_records,
+                task_type=task_type,
+                task_confidence=task_confidence,
+                response_id=acc.response_id,
+                error_type=type(stream_error).__name__ if stream_error else None,
+                error_hash=hash_content(str(stream_error)) if stream_error else None,
+                ttft_ms=acc.ttft_ms,
+            )
+            queue: asyncio.Queue[LLMEvent] = request.app.state.event_queue
+            _enqueue(queue, event, request=request, messages=anthropic_body.get("messages", []),
+                     completion=acc.full_content, system_prompt=anthropic_body.get("system"))
 
     return StreamingResponse(
         _generate(),

@@ -7,7 +7,7 @@ Public API:
     - ABTestConfig / assign_group / get_policy: A/B testing framework
 """
 
-from blockthrough.routing.sanitize import sanitize_for_target
+from blockthrough.routing.sanitize import repair_tool_pairing, sanitize_for_target
 from blockthrough.routing.types import (
     QUALITY_FLOOR,
     RoutingDecision,
@@ -22,5 +22,6 @@ __all__ = [
     "RoutingPolicy",
     "RoutingRule",
     "SelectionCriteria",
+    "repair_tool_pairing",
     "sanitize_for_target",
 ]
