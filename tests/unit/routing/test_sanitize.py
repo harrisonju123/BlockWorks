@@ -34,6 +34,19 @@ class TestSanitizeForTarget:
         assert "thinking" not in body
         assert body["messages"] == [{"role": "user", "content": "hi"}]
 
+    def test_strips_effort_for_haiku_target(self):
+        """Haiku doesn't support effort — strip when routing opus→haiku."""
+        body = {
+            "model": "claude-haiku-4-5-20251001",
+            "thinking": {"type": "adaptive"},
+            "effort": {"level": "low"},
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        sanitize_for_target(body, source_model="claude-opus-4-6", target_model="claude-haiku-4-5-20251001")
+        assert "thinking" not in body
+        assert "effort" not in body
+        assert body["messages"] == [{"role": "user", "content": "hi"}]
+
     def test_strips_anthropic_params_for_openai_target(self):
         body = {
             "model": "gpt-5.2-chat-latest",

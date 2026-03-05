@@ -80,8 +80,9 @@ def sanitize_for_target(
         # Intra-Anthropic: strip thinking for models that don't support it (e.g. haiku)
         if source_provider == "anthropic":
             target_info = MODEL_CATALOG.get(target_model)
-            if "thinking" in body and target_info and not target_info.supports_thinking:
+            if target_info and not target_info.supports_thinking:
                 body.pop("thinking", None)
+                body.pop("effort", None)
         return
 
     source_spec = PROVIDER_SPECS.get(source_provider)
