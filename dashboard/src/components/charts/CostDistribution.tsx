@@ -45,12 +45,12 @@ function CustomTooltip({
   const item = payload[0];
   const pct = totalSpend > 0 ? (item.value / totalSpend) * 100 : 0;
   return (
-    <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded px-3 py-2 text-xs">
-      <p className="text-gray-300 font-mono mb-1">{item.payload.key}</p>
+    <div className="glass-card rounded px-3 py-2 text-xs" style={{ transform: 'none' }}>
+      <p className="text-[var(--text-primary)] font-mono mb-1">{item.payload.key}</p>
       <p className="font-mono" style={{ color: modelColor(item.payload.key) }}>
         {formatUSD(item.value)}
       </p>
-      <p className="text-gray-500 mt-0.5">{pct.toFixed(1)}% of total spend</p>
+      <p className="text-[var(--text-muted)] mt-0.5">{pct.toFixed(1)}% of total spend</p>
     </div>
   );
 }
@@ -82,7 +82,7 @@ export function CostDistribution({ timeRange }: Props) {
       className="min-h-[12rem]"
     >
       {chartData.length === 0 ? (
-        <p className="text-xs text-gray-500 py-6 text-center">No data</p>
+        <p className="text-xs text-[var(--text-muted)] py-6 text-center">No data</p>
       ) : (
         <ResponsiveContainer width="100%" height={chartHeight}>
           <BarChart
@@ -96,7 +96,7 @@ export function CostDistribution({ timeRange }: Props) {
                 const id = `bar-${sanitizeId(entry.key)}`;
                 return (
                   <linearGradient key={id} id={id} x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor={color} stopOpacity={0.6} />
+                    <stop offset="0%" stopColor={color} stopOpacity={0.5} />
                     <stop offset="100%" stopColor={color} stopOpacity={1} />
                   </linearGradient>
                 );
@@ -105,23 +105,29 @@ export function CostDistribution({ timeRange }: Props) {
             <XAxis
               type="number"
               tickFormatter={formatUSD}
-              tick={{ fontSize: 10, fill: "#6b7280" }}
+              tick={{ fontSize: 10, fill: "#64748b" }}
               tickLine={false}
-              axisLine={{ stroke: "#374151" }}
+              axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
             />
             <YAxis
               type="category"
               dataKey="key"
               width={120}
-              tick={{ fontSize: 10, fill: "#9ca3af" }}
+              tick={{ fontSize: 10, fill: "#94a3b8" }}
               tickLine={false}
               axisLine={false}
             />
             <Tooltip
               content={<CustomTooltip totalSpend={totalSpend} />}
-              cursor={{ fill: "#1f2937" }}
+              cursor={{ fill: "rgba(255,255,255,0.03)" }}
             />
-            <Bar dataKey="value" radius={[0, 2, 2, 0]} maxBarSize={18}>
+            <Bar
+              dataKey="value"
+              radius={[0, 2, 2, 0]}
+              maxBarSize={18}
+              animationDuration={1200}
+              animationEasing="ease-out"
+            >
               {chartData.map((entry) => (
                 <Cell
                   key={entry.key}

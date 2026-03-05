@@ -14,9 +14,14 @@ type SortKey = "total_cost_usd" | "total_tokens" | "event_count" | "total_latenc
 type SortDir = "asc" | "desc";
 
 function truncateId(id: string): string {
-  return id.slice(0, 8) + "…";
+  return id.slice(0, 8) + "...";
 }
 
+const RANK_GLOWS = [
+  "drop-shadow(0 0 6px rgba(251,191,36,0.4))",   // gold
+  "drop-shadow(0 0 6px rgba(203,213,225,0.3))",   // silver
+  "drop-shadow(0 0 6px rgba(180,83,9,0.3))",      // bronze
+];
 const RANK_COLORS = ["text-amber-400", "text-gray-300", "text-amber-700"];
 
 function SortHeader({
@@ -35,7 +40,7 @@ function SortHeader({
   const isActive = sortKey === activeSortKey;
   return (
     <th
-      className="text-right py-1.5 pr-4 font-medium cursor-pointer select-none hover:text-gray-300 transition-colors"
+      className="text-right py-1.5 pr-4 font-medium cursor-pointer select-none hover:text-[var(--text-primary)] transition-colors"
       onClick={() => onSort(sortKey)}
     >
       {label}{" "}
@@ -82,7 +87,7 @@ export function TopTracesTable({ timeRange }: Props) {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-gray-800 text-gray-500">
+            <tr className="border-b border-white/[0.06] text-[var(--text-muted)]">
               <th className="text-left py-1.5 pr-2 font-medium w-6">#</th>
               <th className="text-left py-1.5 pr-4 font-medium">Trace ID</th>
               <SortHeader label="Cost" sortKey="total_cost_usd" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -97,9 +102,9 @@ export function TopTracesTable({ timeRange }: Props) {
             {sorted.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-12">
-                  <div className="flex flex-col items-center gap-3 text-gray-500">
+                  <div className="flex flex-col items-center gap-3 text-[var(--text-muted)]">
                     <svg
-                      className="w-8 h-8 text-gray-600"
+                      className="w-8 h-8 text-[var(--text-muted)]"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -112,7 +117,7 @@ export function TopTracesTable({ timeRange }: Props) {
                       />
                     </svg>
                     <p className="text-sm">No traces recorded yet</p>
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-[var(--text-muted)]">
                       Route LLM calls through the proxy to start tracking
                     </p>
                   </div>
@@ -122,24 +127,34 @@ export function TopTracesTable({ timeRange }: Props) {
               sorted.map((trace, i) => (
                 <tr
                   key={trace.trace_id}
-                  className="border-b border-gray-800/50 hover:bg-gray-800/30 hover:border-l-2 hover:border-l-violet-500 transition-colors"
+                  className="border-b border-white/[0.03] hover:bg-violet-500/[0.04] group transition-colors animate-fade-in"
+                  style={{ animationDelay: `${i * 40}ms` }}
                 >
-                  <td className={`py-1.5 pr-2 font-mono font-semibold ${i < 3 ? RANK_COLORS[i] : "text-gray-600"}`}>
-                    {i + 1}
+                  <td className="py-1.5 pr-2 font-mono font-semibold relative">
+                    <span
+                      className={i < 3 ? RANK_COLORS[i] : "text-[var(--text-muted)]"}
+                      style={i < 3 ? { filter: RANK_GLOWS[i] } : undefined}
+                    >
+                      {i + 1}
+                    </span>
                   </td>
-                  <td className="py-1.5 pr-4 font-mono text-gray-300">
-                    {truncateId(trace.trace_id)}
+                  <td className="py-1.5 pr-4 font-mono text-[var(--text-primary)]">
+                    <span className="relative">
+                      {/* Violet left border on hover */}
+                      <span className="absolute -left-3 top-0 bottom-0 w-0.5 bg-violet-500 scale-y-0 group-hover:scale-y-100 transition-transform origin-top rounded-full" />
+                      {truncateId(trace.trace_id)}
+                    </span>
                   </td>
                   <td className="py-1.5 pr-4 font-mono text-right text-violet-300">
                     {formatUSD(trace.total_cost_usd)}
                   </td>
-                  <td className="py-1.5 pr-4 font-mono text-right text-gray-300">
+                  <td className="py-1.5 pr-4 font-mono text-right text-[var(--text-primary)]">
                     {trace.total_tokens.toLocaleString()}
                   </td>
-                  <td className="py-1.5 pr-4 font-mono text-right text-gray-300">
+                  <td className="py-1.5 pr-4 font-mono text-right text-[var(--text-primary)]">
                     {trace.event_count}
                   </td>
-                  <td className="py-1.5 pr-4 font-mono text-right text-gray-400">
+                  <td className="py-1.5 pr-4 font-mono text-right text-[var(--text-secondary)]">
                     {formatMs(trace.total_latency_ms)}
                   </td>
                   <td className="py-1.5 pr-4">
@@ -149,17 +164,17 @@ export function TopTracesTable({ timeRange }: Props) {
                           key={m}
                           className="px-1.5 py-0.5 rounded text-[10px] font-mono"
                           style={{
-                            backgroundColor: modelColor(m) + "22",
+                            backgroundColor: modelColor(m) + "18",
                             color: modelColor(m),
-                            border: `1px solid ${modelColor(m)}44`,
+                            border: `1px solid ${modelColor(m)}33`,
                           }}
                         >
-                          {m.length > 18 ? m.slice(0, 16) + "…" : m}
+                          {m.length > 18 ? m.slice(0, 16) + "..." : m}
                         </span>
                       ))}
                     </div>
                   </td>
-                  <td className="py-1.5 text-gray-500">
+                  <td className="py-1.5 text-[var(--text-muted)]">
                     {trace.agent_framework ?? "–"}
                   </td>
                 </tr>

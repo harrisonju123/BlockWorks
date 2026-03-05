@@ -72,6 +72,83 @@ If you control the LiteLLM proxy host, install the callback directly.
 
 **Marketplace** — Agent/MCP registry, composable workflow builder, revenue sharing protocol, enterprise multi-tenancy with RBAC, and cross-platform interoperability.
 
+## Smart Routing & Auto Model Selection
+
+BlockThrough can automatically choose the most appropriate model for each request based on:
+
+- Task type (from the rules-based classifier)
+- Model fitness scores (quality × latency × cost trends)
+- Budget rules (downgrade or block when caps are hit)
+- Waste heuristics (detect model overkill)
+- A/B testing rules
+
+Routing is evaluated on every request after classification and before the event is persisted.
+
+### Mental Model
+
+1. Classify the task (code generation, summarization, classification, etc.)
+2. Check budget constraints
+3. Score candidate models using the fitness index
+4. Apply YAML policy rules (pin, split, downgrade, block)
+5. Select the final model (or keep the original if policy allows)
+
+### Typical Model Tiers
+
+- **Premium / Frontier tier** — e.g. Claude Opus, OpenAI GPT-5-class models
+  Highest reasoning depth and quality. Used for complex architecture, multi-step reasoning, and high-stakes outputs.
+
+- **Mid tier** — e.g. Claude Sonnet, OpenAI balanced production models
+  Strong quality/cost balance. Used for most production code tasks and tool-using agents.
+
+- **Economy tier** — e.g. Claude Haiku, OpenAI mini-class models
+  Fast and inexpensive. Used for classification, extraction, and simple summarization.
+
+### Concrete Examples
+
+**Simple classification**
+Input: "Is this ticket about billing or product bugs?"
+→ Classified as `classification`
+→ Routed to economy tier (Haiku / mini-class model)
+
+**Short summarization**
+Input: "Summarize this 2-paragraph email."
+→ Routed to economy tier unless long-context reasoning is required
+
+**Production code generation**
+Input: "Write a FastAPI endpoint with async SQLAlchemy."
+→ Routed to mid tier by default (Sonnet-class)
+
+**Complex system design**
+Input: "Design a distributed rate-limiting system with failover."
+→ Routed to premium / frontier tier (Opus / GPT-5-class)
+
+**Budget cap triggered**
+If a spend cap is exceeded and policy is set to downgrade, premium requests are automatically stepped down according to the downgrade path defined in `models.py`.
+
+### Key Principle
+
+Auto routing is not “always cheapest.” It is:
+
+> The cheapest model that meets the required quality for the task.
+
+Premium models are reserved for high reasoning depth, long context, or cases where benchmark data shows measurable quality gains.
+
+### How Does It Determine the “Minimum Model”?
+
+The system does not have an oracle that knows the smallest model that will succeed. Instead, it approximates using a layered approach:
+
+1. **Task classification** — Each request is categorized (classification, summarization, code generation, etc.) using a fast rules-based classifier.
+2. **Policy mapping** — The routing policy maps task types to expected tiers (economy, mid, premium).
+3. **Fitness index** — Historical benchmark data tracks quality, latency, and cost per model per task type. If a cheaper model delivers equivalent quality, its fitness score improves.
+4. **Waste detection** — If expensive models repeatedly show no measurable quality gain for a task type, the system flags overkill and recommends downgrade paths.
+5. **Budget constraints** — Hard caps can force deterministic downgrade paths defined in `models.py` (e.g. Opus → Sonnet → Haiku).
+
+In other words, the "minimum model" is defined empirically:
+
+> The cheapest model whose observed quality meets the configured threshold for that task type.
+
+This estimate improves over time as more benchmark data is collected.
+
 ## Quick Start
 
 ### Prerequisites

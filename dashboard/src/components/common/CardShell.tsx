@@ -21,22 +21,25 @@ export function CardShell({
 }: CardShellProps) {
   return (
     <div
-      className={`bg-gray-900 border border-gray-800 rounded-lg p-4 flex flex-col transition-[border-color,box-shadow] duration-200 hover:border-gray-700 hover:shadow-lg hover:shadow-black/20 ${className}`}
+      className={`glass-card rounded-lg p-4 flex flex-col ${className}`}
     >
       {title && (
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
+        <h2 className="text-[0.625rem] font-semibold uppercase tracking-[0.15em] text-[var(--text-secondary)] mb-3">
           {title}
         </h2>
       )}
 
       {loading && (
-        <div className={`${skeletonHeight} w-full rounded bg-gray-800 relative overflow-hidden`}>
+        <div className={`${skeletonHeight} w-full rounded bg-white/[0.03] relative overflow-hidden`}>
           {/* Chart-shaped skeleton hint */}
           <div className="absolute inset-0 flex items-end px-4 pb-3 gap-1 opacity-20">
             <div className="w-full h-px bg-gray-600 absolute bottom-3 left-4 right-4" />
             <div className="w-px h-full bg-gray-600 absolute left-4 top-2 bottom-3" />
           </div>
-          <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-gray-700/30 to-transparent" />
+          {/* Scan-line sweep */}
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="animate-scan-line w-1/3 h-full bg-gradient-to-r from-transparent via-violet-500/10 to-transparent" />
+          </div>
         </div>
       )}
 
@@ -57,7 +60,7 @@ export function CardShell({
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.007v.008H12v-.008z" />
           </svg>
           <p className="text-red-400 text-xs">{error.message}</p>
-          <p className="text-gray-600 text-[10px]">Check that the API server is running on :8100</p>
+          <p className="text-[var(--text-muted)] text-[10px]">Check that the API server is running on :8100</p>
         </div>
       )}
 

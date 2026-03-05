@@ -49,3 +49,9 @@ contracts/cache/
 contracts/lib/
 contracts/.solc-cache/
 contracts/deployments/local.json
+
+# Demo
+DEMO_SCRIPT.md
+
+# pnpm store
+.pnpm-store/

@@ -23,6 +23,8 @@ from blockthrough.routing.types import (
 )
 from blockthrough.types import TaskType
 
+_UNKNOWN_MODEL_INFO = ModelInfo(tier=3, cost_per_1k_input=0, cost_per_1k_output=0)
+
 # Synthetic fitness defaults by model tier — used when no benchmark data exists
 _TIER_DEFAULTS: dict[int, dict[str, float]] = {
     1: {"quality": 0.95, "latency": 2000.0},
@@ -31,39 +33,36 @@ _TIER_DEFAULTS: dict[int, dict[str, float]] = {
 }
 
 
-def _get_tier_models() -> dict[int, str]:
-    """Return user's configured tier->model mapping."""
-    from blockthrough.config import get_config
-    cfg = get_config()
-    return {1: cfg.routing_model_high, 2: cfg.routing_model_mid, 3: cfg.routing_model_low}
-
-
 def generate_synthetic_fitness() -> list[FitnessEntry]:
-    """Build synthetic FitnessEntry objects for the 3 configured tier models.
+    """Build synthetic FitnessEntry objects for all models in the catalog.
 
-    Quality comes from the assigned tier (high=0.95, mid=0.85, low=0.75),
-    cost from MODEL_CATALOG. sample_size=0 marks them as synthetic so real
-    benchmark data overwrites them via merge_fitness_entries.
+    Quality comes from per-model task_qualities when available, falling back
+    to tier defaults (high=0.95, mid=0.85, low=0.75). This lets the router
+    differentiate models within the same tier — e.g. GPT-5.2 scores 0.90
+    on reasoning while GPT-OSS-120b scores 0.68.
+
+    sample_size=0 marks entries as synthetic so real benchmark data
+    overwrites them via merge_fitness_entries.
     """
-    tier_models = _get_tier_models()
     entries: list[FitnessEntry] = []
     task_types = [t for t in TaskType if t != TaskType.UNKNOWN]
 
-    for tier, model_name in tier_models.items():
-        info = MODEL_CATALOG.get(model_name)
-        if info is None:
-            continue
-        defaults = _TIER_DEFAULTS.get(tier)
+    for model_name, info in MODEL_CATALOG.items():
+        defaults = _TIER_DEFAULTS.get(info.tier)
         if defaults is None:
             continue
+        tier_quality = defaults["quality"]
+        tier_latency = defaults["latency"]
+
         for task_type in task_types:
+            quality = info.quality_for_task(task_type.value, tier_quality)
             entries.append(
                 FitnessEntry(
                     task_type=task_type.value,
                     model=model_name,
-                    avg_quality=defaults["quality"],
+                    avg_quality=quality,
                     avg_cost=info.avg_cost,
-                    avg_latency=defaults["latency"],
+                    avg_latency=tier_latency,
                     sample_size=0,
                 )
             )
@@ -175,8 +174,8 @@ def _apply_criteria(
         viable = sorted(candidates, key=lambda e: e.avg_latency)
 
     elif rule.criteria == SelectionCriteria.HIGHEST_QUALITY_UNDER_COST:
-        # Sort by quality descending (already sorted this way from cache)
-        viable = sorted(candidates, key=lambda e: e.avg_quality, reverse=True)
+        # Already sorted by quality descending from FitnessCache
+        viable = candidates
 
     elif rule.criteria == SelectionCriteria.BEST_VALUE:
         # Quality per unit cost — higher is better
@@ -257,10 +256,9 @@ def resolve(
 
     # Exclude models that don't support tool use when the request has tools
     if has_tool_use:
-        _DEFAULT_INFO = ModelInfo(tier=3, cost_per_1k_input=0, cost_per_1k_output=0)
         qualified = [
             c for c in qualified
-            if MODEL_CATALOG.get(c.model, _DEFAULT_INFO).supports_tool_use
+            if MODEL_CATALOG.get(c.model, _UNKNOWN_MODEL_INFO).supports_tool_use
         ]
 
     best = _apply_criteria(rule, qualified)

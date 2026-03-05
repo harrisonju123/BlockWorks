@@ -96,7 +96,7 @@ class TestBudgetExceeded:
             current_model="claude-opus-4-20250514",
         )
         assert result.action == BudgetAction.DOWNGRADE
-        assert result.suggested_model == "claude-sonnet-4-20250514"
+        assert result.suggested_model == "claude-sonnet-4-6"
 
     def test_alert_action_on_exceed(self) -> None:
         result = check_budget(
@@ -123,7 +123,7 @@ class TestModelDowngrade:
             1.0,
             current_model="claude-opus-4-20250514",
         )
-        assert result.suggested_model == "claude-sonnet-4-20250514"
+        assert result.suggested_model == "claude-sonnet-4-6"
 
     def test_sonnet_downgrades_to_haiku(self) -> None:
         result = check_budget(
@@ -156,7 +156,7 @@ class TestModelDowngrade:
             1.0,
             current_model="gpt-4o",
         )
-        assert result.suggested_model == "gpt-4o-mini"
+        assert result.suggested_model == "claude-haiku-4-5-20251001"
 
 
 class TestBudgetEdgeCases:

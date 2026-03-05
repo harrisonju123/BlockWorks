@@ -8,6 +8,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# Valid task type values for task_qualities validation.
+# Kept in sync with TaskType enum — import-time validation below catches drift.
+_VALID_TASK_TYPES: frozenset[str] = frozenset({
+    "code_generation", "code_review", "classification", "summarization",
+    "extraction", "reasoning", "conversation", "tool_selection",
+})
+
 
 @dataclass(frozen=True)
 class ModelInfo:
@@ -18,10 +25,30 @@ class ModelInfo:
     cost_per_1k_output: float
     downgrade_to: str | None = None
     supports_tool_use: bool = True
+    # Per-task quality scores (0.0–1.0) for synthetic fitness generation.
+    # Keys are TaskType values. Missing keys fall back to the tier default.
+    # This lets the router differentiate models within the same tier —
+    # e.g. GPT-5.2 scores high on reasoning, GPT-OSS scores lower.
+    task_qualities: tuple[tuple[str, float], ...] = ()
+
+    def __post_init__(self) -> None:
+        for task_key, _ in self.task_qualities:
+            if task_key not in _VALID_TASK_TYPES:
+                raise ValueError(
+                    f"Unknown task type '{task_key}' in task_qualities. "
+                    f"Valid: {sorted(_VALID_TASK_TYPES)}"
+                )
 
     @property
     def avg_cost(self) -> float:
         return (self.cost_per_1k_input + self.cost_per_1k_output) / 2
+
+    def quality_for_task(self, task_type: str, tier_default: float) -> float:
+        """Return the quality score for a task type, falling back to tier default."""
+        for t, q in self.task_qualities:
+            if t == task_type:
+                return q
+        return tier_default
 
 
 MODEL_CATALOG: dict[str, ModelInfo] = {
@@ -68,6 +95,16 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_input=0.003,
         cost_per_1k_output=0.015,
         downgrade_to="claude-haiku-4-5-20251001",
+        task_qualities=(
+            ("code_generation", 0.91),
+            ("code_review", 0.90),
+            ("reasoning", 0.88),
+            ("tool_selection", 0.90),
+            ("summarization", 0.87),
+            ("conversation", 0.85),
+            ("classification", 0.84),
+            ("extraction", 0.86),
+        ),
     ),
     "claude-sonnet-4-5-20250929": ModelInfo(
         tier=2,
@@ -86,18 +123,48 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_input=0.00175,
         cost_per_1k_output=0.014,
         downgrade_to="claude-haiku-4-5-20251001",
+        task_qualities=(
+            ("reasoning", 0.90),
+            ("code_generation", 0.88),
+            ("code_review", 0.87),
+            ("summarization", 0.86),
+            ("conversation", 0.82),  # capable but overkill for chat
+            ("classification", 0.80),
+            ("extraction", 0.83),
+            ("tool_selection", 0.85),
+        ),
     ),
     "gpt-5.2-codex": ModelInfo(
         tier=2,
         cost_per_1k_input=0.00175,
         cost_per_1k_output=0.014,
         downgrade_to="claude-haiku-4-5-20251001",
+        task_qualities=(
+            ("code_generation", 0.92),
+            ("code_review", 0.90),
+            ("reasoning", 0.87),
+            ("tool_selection", 0.86),
+            ("conversation", 0.78),
+            ("classification", 0.76),
+            ("summarization", 0.80),
+            ("extraction", 0.80),
+        ),
     ),
     "gpt-4o": ModelInfo(
         tier=2,
         cost_per_1k_input=0.0025,
         cost_per_1k_output=0.01,
         downgrade_to="claude-haiku-4-5-20251001",
+        task_qualities=(
+            ("conversation", 0.86),
+            ("reasoning", 0.84),
+            ("code_generation", 0.85),
+            ("code_review", 0.84),
+            ("summarization", 0.85),
+            ("classification", 0.83),
+            ("extraction", 0.84),
+            ("tool_selection", 0.84),
+        ),
     ),
     "gpt-4-turbo": ModelInfo(
         tier=2,
@@ -125,19 +192,49 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_output=0.0025,
         downgrade_to="moonshotai.kimi-k2.5",
         supports_tool_use=False,
+        task_qualities=(
+            ("reasoning", 0.87),
+            ("code_generation", 0.84),
+            ("summarization", 0.83),
+            ("conversation", 0.82),
+            ("extraction", 0.81),
+            ("classification", 0.80),
+            ("code_review", 0.82),
+            ("tool_selection", 0.78),
+        ),
     ),
     "moonshotai.kimi-k2.5": ModelInfo(
         tier=2,
         cost_per_1k_input=0.0006,
         cost_per_1k_output=0.003,
         supports_tool_use=False,
+        task_qualities=(
+            ("conversation", 0.83),
+            ("summarization", 0.82),
+            ("reasoning", 0.84),
+            ("code_generation", 0.82),
+            ("extraction", 0.81),
+            ("classification", 0.80),
+            ("code_review", 0.80),
+            ("tool_selection", 0.77),
+        ),
     ),
     "openai.gpt-oss-120b-1:0": ModelInfo(
-        tier=2,
+        tier=3,
         cost_per_1k_input=0.00015,
         cost_per_1k_output=0.00069,
         downgrade_to="openai.gpt-oss-20b-1:0",
         supports_tool_use=False,
+        task_qualities=(
+            ("conversation", 0.80),  # strong for basic chat at fraction of cost
+            ("summarization", 0.78),
+            ("extraction", 0.77),
+            ("classification", 0.76),
+            ("code_generation", 0.72),  # weaker on complex code
+            ("code_review", 0.70),
+            ("reasoning", 0.68),  # not suited for deep multi-step reasoning
+            ("tool_selection", 0.65),
+        ),
     ),
     "minimax.minimax-m2.1": ModelInfo(
         tier=2,
@@ -150,6 +247,16 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         tier=3,
         cost_per_1k_input=0.0008,
         cost_per_1k_output=0.004,
+        task_qualities=(
+            ("conversation", 0.82),
+            ("classification", 0.83),
+            ("extraction", 0.81),
+            ("summarization", 0.80),
+            ("tool_selection", 0.80),
+            ("code_generation", 0.74),
+            ("code_review", 0.73),
+            ("reasoning", 0.72),
+        ),
     ),
     # gpt-4o-mini not available in LiteLLM — kept for cost calculations
     # if events reference it, but routing won't select it.
@@ -175,6 +282,16 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         cost_per_1k_input=0.00003,
         cost_per_1k_output=0.00014,
         supports_tool_use=False,
+        task_qualities=(
+            ("conversation", 0.74),  # adequate for simple chat
+            ("classification", 0.72),
+            ("extraction", 0.71),
+            ("summarization", 0.70),
+            ("code_generation", 0.62),
+            ("code_review", 0.60),
+            ("reasoning", 0.55),  # too small for serious reasoning
+            ("tool_selection", 0.55),
+        ),
     ),
     "google.gemma-3-27b-it": ModelInfo(
         tier=3,
@@ -217,6 +334,21 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
         supports_tool_use=False,
     ),
 }
+
+
+# Import-time guard: catch TaskType enum drift immediately
+def _check_task_type_sync() -> None:
+    from blockthrough.types import TaskType
+    enum_values = {t.value for t in TaskType if t.value != "unknown"}
+    if enum_values != _VALID_TASK_TYPES:
+        missing = enum_values - _VALID_TASK_TYPES
+        extra = _VALID_TASK_TYPES - enum_values
+        raise RuntimeError(
+            f"_VALID_TASK_TYPES out of sync with TaskType enum. "
+            f"Missing: {missing}, Extra: {extra}"
+        )
+
+_check_task_type_sync()
 
 
 def get_anthropic_models() -> set[str]:

@@ -65,8 +65,8 @@ class BlockThroughConfig(BaseSettings):
     # Models available in the upstream provider (e.g. LiteLLM).
     # The router will only select from this set. Empty = allow all catalog models.
     routing_available_models: list[str] = []
-    # User-selected models per tier. Synthetic fitness is generated for only
-    # these 3 models. Task complexity determines which tier is used.
+    # User-selected fallback models per tier. Used by the bootstrap policy
+    # when no candidate meets quality criteria for a task type.
     routing_model_high: str = "claude-opus-4-6"
     routing_model_mid: str = "claude-sonnet-4-6"
     routing_model_low: str = "claude-haiku-4-5-20251001"

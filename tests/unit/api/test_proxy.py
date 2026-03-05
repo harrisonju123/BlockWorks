@@ -17,6 +17,8 @@ from blockthrough.api.routes.proxy import (
     _detect_framework_from_headers,
     _extract_trace_from_headers,
     _infer_provider,
+    _is_plan_mode,
+    _is_plan_mode_anthropic,
     _request_uses_tools,
     _request_uses_tools_anthropic,
 )
@@ -523,3 +525,88 @@ class TestRequestUsesToolsAnthropic:
 
     def test_empty_body(self):
         assert _request_uses_tools_anthropic({}) is False
+
+
+# ---------------------------------------------------------------------------
+# _is_plan_mode (OpenAI format — system in messages)
+# ---------------------------------------------------------------------------
+
+class TestIsPlanMode:
+    def test_plan_mode_active_string(self):
+        body = {"messages": [
+            {"role": "system", "content": "You are Claude Code. Plan mode is active. Do not write code."},
+            {"role": "user", "content": "Design a REST API"},
+        ]}
+        assert _is_plan_mode(body) is True
+
+    def test_plan_mode_still_active(self):
+        body = {"messages": [
+            {"role": "system", "content": "Plan mode still active — read-only."},
+        ]}
+        assert _is_plan_mode(body) is True
+
+    def test_no_plan_mode(self):
+        body = {"messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Write a function"},
+        ]}
+        assert _is_plan_mode(body) is False
+
+    def test_content_block_array_format(self):
+        body = {"messages": [
+            {"role": "system", "content": [
+                {"type": "text", "text": "You are Claude Code."},
+                {"type": "text", "text": "Plan mode is active. Read-only."},
+            ]},
+        ]}
+        assert _is_plan_mode(body) is True
+
+    def test_content_block_array_no_plan_mode(self):
+        body = {"messages": [
+            {"role": "system", "content": [
+                {"type": "text", "text": "You are a helpful assistant."},
+            ]},
+        ]}
+        assert _is_plan_mode(body) is False
+
+    def test_no_system_message(self):
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        assert _is_plan_mode(body) is False
+
+    def test_empty_messages(self):
+        assert _is_plan_mode({"messages": []}) is False
+        assert _is_plan_mode({}) is False
+
+
+# ---------------------------------------------------------------------------
+# _is_plan_mode_anthropic (Anthropic format — system as top-level field)
+# ---------------------------------------------------------------------------
+
+class TestIsPlanModeAnthropic:
+    def test_plan_mode_in_system_string(self):
+        body = {
+            "system": "You are Claude Code. Plan mode is active.",
+            "messages": [{"role": "user", "content": "Design an API"}],
+        }
+        assert _is_plan_mode_anthropic(body) is True
+
+    def test_plan_mode_in_system_blocks(self):
+        body = {
+            "system": [
+                {"type": "text", "text": "You are Claude Code."},
+                {"type": "text", "text": "Plan mode is active. Read-only."},
+            ],
+            "messages": [{"role": "user", "content": "Plan this"}],
+        }
+        assert _is_plan_mode_anthropic(body) is True
+
+    def test_no_plan_mode_anthropic(self):
+        body = {
+            "system": "You are a helpful coding assistant.",
+            "messages": [{"role": "user", "content": "Write code"}],
+        }
+        assert _is_plan_mode_anthropic(body) is False
+
+    def test_no_system_field(self):
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        assert _is_plan_mode_anthropic(body) is False

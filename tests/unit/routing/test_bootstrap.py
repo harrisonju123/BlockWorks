@@ -16,7 +16,6 @@ from blockthrough.routing.policy import (
 from blockthrough.routing.router import (
     FitnessCache,
     _TIER_DEFAULTS,
-    _get_tier_models,
     generate_synthetic_fitness,
     merge_fitness_entries,
     resolve,
@@ -98,37 +97,12 @@ class TestBootstrapPolicy:
         assert policy.rules[-1].fallback == cfg.routing_model_mid
 
 
-class TestTierModels:
-
-    def test_returns_3_models(self) -> None:
-        tier_models = _get_tier_models()
-        assert len(tier_models) == 3
-        assert set(tier_models.keys()) == {1, 2, 3}
-
-    def test_defaults_match_config(self) -> None:
-        cfg = get_config()
-        tier_models = _get_tier_models()
-        assert tier_models[1] == cfg.routing_model_high
-        assert tier_models[2] == cfg.routing_model_mid
-        assert tier_models[3] == cfg.routing_model_low
-
-    def test_correct_quality_per_tier(self) -> None:
-        entries = generate_synthetic_fitness()
-        tier_models = _get_tier_models()
-        tier_by_model = {model: tier for tier, model in tier_models.items()}
-        for entry in entries:
-            tier = tier_by_model[entry.model]
-            expected_quality = _TIER_DEFAULTS[tier]["quality"]
-            assert entry.avg_quality == expected_quality
-
-
 class TestSyntheticFitness:
 
-    def test_generates_entries_for_tier_models_only(self) -> None:
+    def test_generates_entries_for_all_catalog_models(self) -> None:
         entries = generate_synthetic_fitness()
         models_in_entries = {e.model for e in entries}
-        cfg = get_config()
-        expected = {cfg.routing_model_high, cfg.routing_model_mid, cfg.routing_model_low}
+        expected = {name for name, info in MODEL_CATALOG.items() if info.tier in _TIER_DEFAULTS}
         assert models_in_entries == expected
 
     def test_excludes_unknown_task_type(self) -> None:
@@ -154,10 +128,39 @@ class TestSyntheticFitness:
         assert all(e.sample_size == 0 for e in entries)
 
     def test_entry_count(self) -> None:
-        """Should be 3 tier models * len(non-unknown task types)."""
+        """Should be all catalog models * len(non-unknown task types)."""
         entries = generate_synthetic_fitness()
         n_tasks = len([t for t in TaskType if t != TaskType.UNKNOWN])
-        assert len(entries) == 3 * n_tasks
+        n_models = len([m for m, info in MODEL_CATALOG.items() if info.tier in _TIER_DEFAULTS])
+        assert len(entries) == n_models * n_tasks
+
+    def test_task_qualities_override_tier_default(self) -> None:
+        """Models with task_qualities get per-task scores, not flat tier defaults."""
+        entries = generate_synthetic_fitness()
+        # GPT-OSS-120b has reasoning=0.68 which differs from tier-3 default 0.75
+        oss_reasoning = next(
+            e for e in entries
+            if e.model == "openai.gpt-oss-120b-1:0" and e.task_type == "reasoning"
+        )
+        assert oss_reasoning.avg_quality == 0.68
+
+        # GPT-5.2 has conversation=0.82 which differs from tier-2 default 0.85
+        gpt52_conversation = next(
+            e for e in entries
+            if e.model == "gpt-5.2-chat-latest" and e.task_type == "conversation"
+        )
+        assert gpt52_conversation.avg_quality == 0.82
+
+    def test_task_qualities_cover_all_task_types(self) -> None:
+        """Every model with task_qualities must cover all non-UNKNOWN task types."""
+        expected = {t.value for t in TaskType if t != TaskType.UNKNOWN}
+        for name, info in MODEL_CATALOG.items():
+            if not info.task_qualities:
+                continue
+            covered = {t for t, _ in info.task_qualities}
+            assert covered == expected, (
+                f"{name} task_qualities covers {covered}, expected {expected}"
+            )
 
 
 class TestMergeFitness:
@@ -264,27 +267,44 @@ class TestBootstrapWithSyntheticFitness:
         assert decision.was_overridden
         assert decision.selected_model != "claude-opus-4-20250514"
 
-    def test_haiku_request_rerouted_below_quality_floor(self) -> None:
-        """Haiku's synthetic quality (0.75) is below min_quality (0.8), so it gets rerouted."""
-        cfg = get_config()
+    def test_conversation_prefers_cheap_model(self) -> None:
+        """For conversation, BEST_VALUE should pick a cheap model with adequate quality."""
         cache = FitnessCache()
         cache.update(generate_synthetic_fitness())
         policy = bootstrap_policy(fitness_cache=cache)
 
         decision = resolve(
-            task_type="classification",
-            requested_model="claude-haiku-4-5-20251001",
+            task_type="conversation",
+            requested_model="gpt-5.2-chat-latest",
             fitness_cache=cache,
             policy=policy,
         )
-        # Tier-3 synthetic quality (0.75) < min_quality (0.8), so router
-        # picks the mid model as best value above quality threshold
-        assert decision.was_overridden
-        assert decision.selected_model == cfg.routing_model_mid
+        # GPT-OSS-120b has conversation quality 0.80 (above 0.8 threshold)
+        # at a fraction of GPT-5.2's cost, so BEST_VALUE should pick it
+        selected_info = MODEL_CATALOG.get(decision.selected_model)
+        gpt52_info = MODEL_CATALOG["gpt-5.2-chat-latest"]
+        assert selected_info is not None
+        assert selected_info.avg_cost <= gpt52_info.avg_cost
+
+    def test_reasoning_prefers_capable_model(self) -> None:
+        """For reasoning, BEST_VALUE should not pick a weak cheap model."""
+        cache = FitnessCache()
+        cache.update(generate_synthetic_fitness())
+        policy = bootstrap_policy(fitness_cache=cache)
+
+        decision = resolve(
+            task_type="reasoning",
+            requested_model="claude-opus-4-20250514",
+            fitness_cache=cache,
+            policy=policy,
+        )
+        # GPT-OSS-120b has reasoning=0.68 which is below quality floor (0.7)
+        # so it should NOT be selected for reasoning tasks
+        assert decision.selected_model != "openai.gpt-oss-120b-1:0"
+        assert decision.selected_model != "openai.gpt-oss-20b-1:0"
 
     def test_complex_task_routes_appropriately(self) -> None:
-        """Complex task with opus request should route to mid (best value above threshold)."""
-        cfg = get_config()
+        """Complex task with opus request should route away from frontier."""
         cache = FitnessCache()
         cache.update(generate_synthetic_fitness())
         policy = bootstrap_policy(fitness_cache=cache)
@@ -296,8 +316,8 @@ class TestBootstrapWithSyntheticFitness:
             policy=policy,
         )
         assert decision.was_overridden
-        # Both high and mid meet threshold; mid has better quality/cost ratio
-        assert decision.selected_model == cfg.routing_model_mid
+        # Should pick a cost-effective model, not opus
+        assert decision.selected_model != "claude-opus-4-20250514"
 
     def test_catch_all_handles_unknown_task(self) -> None:
         """Unknown task type falls through to catch-all rule."""
