@@ -49,6 +49,7 @@ contracts/cache/
 contracts/lib/
 contracts/.solc-cache/
 contracts/deployments/local.json
+contracts/broadcast/
 
 # Demo
 DEMO_SCRIPT.md
