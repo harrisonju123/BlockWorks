@@ -19,10 +19,12 @@ from blockthrough.api.routes.proxy import (
     _infer_provider,
     _is_plan_mode,
     _is_plan_mode_anthropic,
+    _maybe_route,
     _request_uses_tools,
     _request_uses_tools_anthropic,
 )
-from blockthrough.types import LLMEvent
+from blockthrough.routing.types import RoutingDecision
+from blockthrough.types import LLMEvent, TaskType
 
 
 # ---------------------------------------------------------------------------
@@ -610,3 +612,137 @@ class TestIsPlanModeAnthropic:
     def test_no_system_field(self):
         body = {"messages": [{"role": "user", "content": "hi"}]}
         assert _is_plan_mode_anthropic(body) is False
+
+
+# ---------------------------------------------------------------------------
+# Confidence-gated routing
+# ---------------------------------------------------------------------------
+
+def _make_routing_request(confidence_threshold=0.7, routing_enabled=True):
+    """Build a mock Request with routing state configured."""
+    request = MagicMock()
+    request.app.state.routing_enabled = routing_enabled
+    request.app.state.routing_confidence_threshold = confidence_threshold
+    request.app.state.fitness_cache = MagicMock()
+    request.app.state.routing_policy = MagicMock(version=1)
+    request.app.state.decision_queue = None
+    request.headers = {}
+    return request
+
+
+class TestConfidenceGate:
+    """Confidence gate in _maybe_route: low confidence → passthrough."""
+
+    def test_high_confidence_routes(self):
+        """Confidence above threshold → routing proceeds normally."""
+        request = _make_routing_request(confidence_threshold=0.7)
+
+        def classify_fn(body, pt, ct):
+            return TaskType.CODE_GENERATION, 0.85, "hash123"
+
+        with pytest.MonkeyPatch.context() as mp:
+            # Mock resolve() to return a routed decision
+            routed = RoutingDecision(
+                selected_model="claude-haiku-4-5-20251001",
+                reason="cheapest_above_quality",
+                was_overridden=True,
+                policy_rule_id=0,
+            )
+            mp.setattr("blockthrough.api.routes.proxy.resolve", lambda **kw: routed)
+            mp.setattr("blockthrough.api.routes.proxy.record_decision", lambda d: None)
+
+            model, decision, (tt, conf, sh) = _maybe_route(
+                request,
+                {"messages": [{"role": "user", "content": "write a function"}]},
+                "claude-sonnet-4-20250514",
+                classify_fn,
+            )
+
+        assert model == "claude-haiku-4-5-20251001"
+        assert decision.was_overridden is True
+        assert decision.confidence == 0.85
+
+    def test_low_confidence_passthrough(self):
+        """Confidence below threshold → passthrough, keep requested model."""
+        request = _make_routing_request(confidence_threshold=0.7)
+
+        def classify_fn(body, pt, ct):
+            return TaskType.CONVERSATION, 0.4, "hash456"
+
+        model, decision, (tt, conf, sh) = _maybe_route(
+            request,
+            {"messages": [{"role": "user", "content": "hello"}]},
+            "claude-sonnet-4-20250514",
+            classify_fn,
+        )
+
+        assert model == "claude-sonnet-4-20250514"
+        assert decision is not None
+        assert decision.was_overridden is False
+        assert "classifier confidence" in decision.reason
+        assert "0.40" in decision.reason
+
+    def test_none_confidence_passthrough(self):
+        """None confidence → passthrough."""
+        request = _make_routing_request(confidence_threshold=0.7)
+
+        def classify_fn(body, pt, ct):
+            return TaskType.CONVERSATION, None, "hash789"
+
+        model, decision, (tt, conf, sh) = _maybe_route(
+            request,
+            {"messages": [{"role": "user", "content": "hey"}]},
+            "claude-sonnet-4-20250514",
+            classify_fn,
+        )
+
+        assert model == "claude-sonnet-4-20250514"
+        assert decision is not None
+        assert decision.was_overridden is False
+        assert "classifier confidence" in decision.reason
+
+    def test_confidence_at_threshold_routes(self):
+        """Confidence exactly at threshold (0.7) → routing proceeds (gate is <, not <=)."""
+        request = _make_routing_request(confidence_threshold=0.7)
+
+        def classify_fn(body, pt, ct):
+            return TaskType.CODE_GENERATION, 0.7, "hash_exact"
+
+        with pytest.MonkeyPatch.context() as mp:
+            routed = RoutingDecision(
+                selected_model="claude-haiku-4-5-20251001",
+                reason="cheapest_above_quality",
+                was_overridden=True,
+                policy_rule_id=0,
+            )
+            mp.setattr("blockthrough.api.routes.proxy.resolve", lambda **kw: routed)
+            mp.setattr("blockthrough.api.routes.proxy.record_decision", lambda d: None)
+
+            model, decision, (tt, conf, sh) = _maybe_route(
+                request,
+                {"messages": [{"role": "user", "content": "write code"}]},
+                "claude-sonnet-4-20250514",
+                classify_fn,
+            )
+
+        assert model == "claude-haiku-4-5-20251001"
+        assert decision.was_overridden is True
+
+    def test_plan_mode_ignores_confidence(self):
+        """Plan mode → force Opus regardless of confidence."""
+        request = _make_routing_request(confidence_threshold=0.7)
+
+        def classify_fn(body, pt, ct):
+            return TaskType.CONVERSATION, 0.3, "hash_plan"
+
+        body = {"messages": [
+            {"role": "system", "content": "Plan mode is active. Do not write code."},
+            {"role": "user", "content": "Design an API"},
+        ]}
+
+        model, decision, _ = _maybe_route(
+            request, body, "claude-sonnet-4-20250514", classify_fn,
+        )
+
+        assert model == "claude-opus-4-6"
+        assert decision is None

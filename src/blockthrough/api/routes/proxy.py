@@ -38,7 +38,7 @@ from blockthrough.pipeline.hasher import hash_content
 from blockthrough.api.routes.routing import record_decision
 from blockthrough.routing.router import FitnessCache, resolve
 from blockthrough.routing.convert import anthropic_to_openai_request, openai_to_anthropic_response
-from blockthrough.routing.sanitize import repair_tool_pairing, sanitize_for_target
+from blockthrough.routing.sanitize import repair_tool_pairing, sanitize_for_target, strip_unsupported_params
 from blockthrough.routing.types import RoutingDecision
 from blockthrough.routing.writer import DecisionRecord
 from blockthrough.types import EventStatus, LLMEvent, TaskType, ToolCallRecord
@@ -230,6 +230,34 @@ def _maybe_route(
     if task_type is None:
         return model, None, (task_type, confidence, sys_hash)
 
+    # Gate on classifier confidence — only route when classification is trustworthy
+    confidence_threshold = getattr(request.app.state, "routing_confidence_threshold", 0.7)
+    if confidence is None or confidence < confidence_threshold:
+        decision = RoutingDecision(
+            selected_model=model,
+            reason=f"passthrough: classifier confidence {confidence if confidence is not None else 0:.2f} < {confidence_threshold:.2f}",
+            was_overridden=False,
+            policy_rule_id=None,
+            confidence=confidence,
+        )
+        record_decision(decision)
+        decision_queue = getattr(request.app.state, "decision_queue", None)
+        if decision_queue is not None:
+            record = DecisionRecord(
+                task_type=task_type.value if hasattr(task_type, "value") else str(task_type),
+                requested_model=model,
+                selected_model=model,
+                was_overridden=False,
+                reason=decision.reason,
+                policy_version=policy.version if hasattr(policy, "version") else None,
+                group_name=None,
+            )
+            try:
+                decision_queue.put_nowait(record)
+            except asyncio.QueueFull:
+                logger.warning("Decision queue full — dropping routing decision")
+        return model, decision, (task_type, confidence, sys_hash)
+
     decision = resolve(
         task_type=task_type,
         requested_model=model,
@@ -238,6 +266,7 @@ def _maybe_route(
         has_tool_use=has_tool_use,
         allowed_models=allowed_models,
     )
+    decision.confidence = confidence
 
     # Record decision in the in-memory buffer for the dashboard feed
     record_decision(decision)
@@ -604,6 +633,10 @@ async def proxy_chat_completions(request: Request) -> JSONResponse | StreamingRe
         model = routed_model
         sanitize_for_target(body, source_model=original_model, target_model=routed_model)
 
+    # Always strip params unsupported by the outgoing model (even without routing override).
+    # chat/completions upstream is always LiteLLM (localhost:4000).
+    strip_unsupported_params(body, model, upstream_is_litellm=True)
+
     repair_tool_pairing(body)
 
     if body.get("stream", False):
@@ -864,6 +897,11 @@ async def proxy_messages(request: Request) -> JSONResponse | StreamingResponse:
         body["model"] = routed_model
         model = routed_model
         sanitize_for_target(body, source_model=original_model, target_model=routed_model)
+
+    # Always strip params unsupported by the outgoing model (even without routing override).
+    # Remote LiteLLM can re-route (e.g. opus→haiku) without stripping effort.
+    upstream_is_litellm = getattr(request.app.state, "anthropic_upstream_is_litellm", False)
+    strip_unsupported_params(body, model, upstream_is_litellm=upstream_is_litellm)
 
     # Always repair tool pairing — even without routing override, LiteLLM
     # may route to OpenAI via model groups, which rejects orphaned tool_calls

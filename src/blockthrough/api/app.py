@@ -122,6 +122,9 @@ async def lifespan(app: FastAPI):
         headers=_anthropic_default_headers,
     )
     app.state.anthropic_client = anthropic_client
+    # Detect if Anthropic upstream is a LiteLLM proxy (not direct Anthropic API).
+    # LiteLLM can re-route models, so we need to strip params it won't clean up.
+    app.state.anthropic_upstream_is_litellm = "api.anthropic.com" not in cfg.anthropic_upstream_url
 
     # Event pipeline
     event_queue: asyncio.Queue[LLMEvent] = asyncio.Queue(
@@ -139,6 +142,7 @@ async def lifespan(app: FastAPI):
 
     # -- Routing ---------------------------------------------------------------
     app.state.routing_enabled = cfg.routing_enabled
+    app.state.routing_confidence_threshold = cfg.classifier_confidence_threshold
     decision_writer_task = None
     if cfg.routing_enabled:
         app.state.fitness_cache = FitnessCache()

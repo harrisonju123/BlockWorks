@@ -62,6 +62,7 @@ class RoutingDecision(BaseModel):
     was_overridden: bool  # True when the selected model differs from requested
     policy_rule_id: int | None = None  # index of the matched rule, None if passthrough
     group: str | None = None  # A/B test group tag ("control" or "experiment")
+    confidence: float | None = None
 
 
 # Absolute quality floor enforced regardless of policy settings.
