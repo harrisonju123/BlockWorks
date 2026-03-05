@@ -1,12 +1,13 @@
-"""Evaluation harness for the rules-based task classifier.
+"""Evaluation harness for the task classifier.
 
 Loads a synthetic JSONL dataset, runs each example through the
-classifier, and computes accuracy / precision / recall / F1 metrics
-per task type plus a confusion matrix.
+classifier (rules-based or LLM-based), and computes accuracy /
+precision / recall / F1 metrics per task type plus a confusion matrix.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -15,8 +16,9 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
+from blockthrough.classifier.llm_classifier import llm_classify
 from blockthrough.classifier.rules import classify, compute_token_ratio, extract_keywords
-from blockthrough.classifier.taxonomy import ClassifierInput
+from blockthrough.classifier.taxonomy import ClassificationResult, ClassifierInput
 from blockthrough.types import TaskType
 
 _FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -146,50 +148,57 @@ def load_dataset(path: Path | None = None) -> list[EvalExample]:
     return examples
 
 
-def evaluate(examples: list[EvalExample]) -> EvalResult:
-    """Run the classifier on every example and compute metrics."""
+def _init_result() -> EvalResult:
+    """Create an EvalResult with per-class containers for every known task type."""
     result = EvalResult()
-
-    # Initialise per-class containers for every known task type
     for tt in TaskType:
         result.per_class[tt.value] = PerClassMetrics()
         result.confusion[tt.value] = defaultdict(int)
+    return result
+
+
+def _accumulate(result: EvalResult, predicted: str, expected: str, confidence: float) -> None:
+    """Shared metrics accumulation after each classification."""
+    result.total += 1
+    is_correct = predicted == expected
+
+    if is_correct:
+        result.correct += 1
+        result.correct_confidences.append(confidence)
+    else:
+        result.incorrect_confidences.append(confidence)
+
+    result.predictions.append((is_correct, confidence))
+    result.confusion[expected][predicted] += 1
+
+    if predicted == expected:
+        result.per_class[expected].tp += 1
+    else:
+        result.per_class[predicted].fp += 1
+        result.per_class[expected].fn += 1
+
+
+def evaluate(examples: list[EvalExample]) -> EvalResult:
+    """Run the classifier on every example and compute metrics."""
+    result = _init_result()
 
     for ex in examples:
         classification = classify(ex.classifier_input)
-        predicted = classification.task_type.value
-        expected = ex.expected_task_type.value
-        confidence = classification.confidence
-
-        result.total += 1
-        is_correct = predicted == expected
-
-        if is_correct:
-            result.correct += 1
-            result.correct_confidences.append(confidence)
-        else:
-            result.incorrect_confidences.append(confidence)
-
-        result.predictions.append((is_correct, confidence))
-
-        # Confusion matrix
-        result.confusion[expected][predicted] += 1
-
-        # Per-class TP / FP / FN
-        if predicted == expected:
-            result.per_class[expected].tp += 1
-        else:
-            result.per_class[predicted].fp += 1
-            result.per_class[expected].fn += 1
+        _accumulate(
+            result,
+            predicted=classification.task_type.value,
+            expected=ex.expected_task_type.value,
+            confidence=classification.confidence,
+        )
 
     return result
 
 
-def print_report(result: EvalResult, console: Console | None = None) -> None:
+def print_report(result: EvalResult, console: Console | None = None, label: str = "rules") -> None:
     """Print a formatted evaluation report to stdout."""
     con = console or Console()
 
-    con.print("\n[bold underline]Classifier Evaluation Report[/bold underline]\n")
+    con.print(f"\n[bold underline]Classifier Evaluation Report ({label})[/bold underline]\n")
 
     # Overall accuracy
     con.print(f"  Total examples:  {result.total}")
@@ -262,9 +271,45 @@ def print_report(result: EvalResult, console: Console | None = None) -> None:
     con.print()
 
 
-def run(dataset_path: Path | None = None) -> EvalResult:
-    """Load dataset, evaluate, print report, and return result."""
+_FALLBACK_CLASSIFICATION = ClassificationResult(
+    task_type=TaskType.UNKNOWN,
+    confidence=0.0,
+    signals=["llm_classifier_failed"],
+)
+
+
+async def evaluate_llm(examples: list[EvalExample], model: str) -> EvalResult:
+    """Run the LLM classifier against every example and compute metrics."""
+    result = _init_result()
+
+    for ex in examples:
+        try:
+            classification = await llm_classify(ex.classifier_input, model=model)
+        except Exception:
+            classification = _FALLBACK_CLASSIFICATION
+
+        _accumulate(
+            result,
+            predicted=classification.task_type.value,
+            expected=ex.expected_task_type.value,
+            confidence=classification.confidence,
+        )
+
+    return result
+
+
+def run(dataset_path: Path | None = None, model: str | None = None) -> EvalResult:
+    """Load dataset, evaluate, print report, and return result.
+
+    If model is provided, uses the LLM classifier via that model.
+    Otherwise uses the rules-based classifier.
+    """
     examples = load_dataset(dataset_path)
-    result = evaluate(examples)
-    print_report(result)
+
+    if model:
+        result = asyncio.run(evaluate_llm(examples, model=model))
+    else:
+        result = evaluate(examples)
+
+    print_report(result, label=model or "rules")
     return result

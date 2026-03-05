@@ -26,11 +26,13 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from blockthrough.benchmarking.mirror import should_sample
 from blockthrough.benchmarking.types import BenchmarkConfig
+from blockthrough.classifier.llm_classifier import llm_classify
 from blockthrough.classifier.rules import (
     classify,
     compute_token_ratio,
     extract_keywords,
 )
+from blockthrough.config import get_config
 from blockthrough.classifier.taxonomy import ClassifierInput
 from blockthrough.models import MODEL_CATALOG, get_anthropic_models
 from blockthrough.pipeline.context import FRAMEWORK_HINTS
@@ -197,8 +199,8 @@ def _request_uses_tools_anthropic(body: dict) -> bool:
     return False
 
 
-def _maybe_route(
-    request: Request, body: dict, model: str, classify_fn: Callable[..., tuple[TaskType | None, float | None, str | None]],
+async def _maybe_route(
+    request: Request, body: dict, model: str, classify_fn: Callable[..., Any],
     *, has_tool_use: bool = False, allowed_models: set[str] | None = None,
 ) -> tuple[str, RoutingDecision | None, tuple[TaskType | None, float | None, str | None]]:
     """Pre-classify and resolve routing if enabled.
@@ -226,7 +228,7 @@ def _maybe_route(
         return model, None, (None, None, None)
 
     # Pre-classify to get task_type (token counts unknown yet, pass 0)
-    task_type, confidence, sys_hash = classify_fn(body, 0, 0)
+    task_type, confidence, sys_hash = await classify_fn(body, 0, 0)
     if task_type is None:
         return model, None, (task_type, confidence, sys_hash)
 
@@ -294,7 +296,7 @@ def _maybe_route(
     return model, decision, (task_type, confidence, sys_hash)
 
 
-def _classify_request(
+async def _classify_request(
     body: dict,
     prompt_tokens: int,
     completion_tokens: int,
@@ -359,6 +361,18 @@ def _classify_request(
         has_tool_calls=has_tool_calls,
         output_format_hint=output_format_hint,
     )
+    config = get_config()
+    if config.classifier_use_ml:
+        try:
+            result = await llm_classify(
+                inp,
+                model=config.classifier_model,
+                timeout_s=config.classifier_llm_timeout_s,
+            )
+            return result.task_type, result.confidence, system_prompt_hash
+        except Exception as exc:
+            logger.warning("LLM classifier failed (%s), falling back to rules", exc)
+
     result = classify(inp)
     return result.task_type, result.confidence, system_prompt_hash
 
@@ -569,7 +583,7 @@ class _AnthropicStreamAccumulator:
         ]
 
 
-def _classify_anthropic_request(
+async def _classify_anthropic_request(
     body: dict,
     prompt_tokens: int,
     completion_tokens: int,
@@ -593,7 +607,7 @@ def _classify_anthropic_request(
         "tools": body.get("tools", []),
         "model": body.get("model", "unknown"),
     }
-    return _classify_request(compat, prompt_tokens, completion_tokens)
+    return await _classify_request(compat, prompt_tokens, completion_tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -623,7 +637,7 @@ async def proxy_chat_completions(request: Request) -> JSONResponse | StreamingRe
     model = body.get("model", "unknown")
 
     # Routing: potentially override the model before forwarding
-    routed_model, _, _ = _maybe_route(
+    routed_model, _, _ = await _maybe_route(
         request, body, model, _classify_request,
         has_tool_use=_request_uses_tools(body),
     )
@@ -696,7 +710,7 @@ async def _handle_non_streaming(
         break  # first choice only
 
     # Classify + get system_prompt_hash in one pass
-    task_type, task_confidence, sys_hash = _classify_request(body, prompt_tokens, completion_tokens)
+    task_type, task_confidence, sys_hash = await _classify_request(body, prompt_tokens, completion_tokens)
 
     # Error info
     error_type = None
@@ -793,7 +807,7 @@ async def _handle_streaming(
             completion_tokens = acc.completion_tokens
             tool_calls = acc.tool_call_records
 
-            task_type, task_confidence, sys_hash = _classify_request(
+            task_type, task_confidence, sys_hash = await _classify_request(
                 body, prompt_tokens, completion_tokens,
             )
 
@@ -887,7 +901,7 @@ async def proxy_messages(request: Request) -> JSONResponse | StreamingResponse:
     upstream_models: set[str] | None = getattr(request.app.state, "upstream_models", None)
     if upstream_models is None:
         upstream_models = get_anthropic_models()
-    routed_model, _, _ = _maybe_route(
+    routed_model, _, _ = await _maybe_route(
         request, body, model, _classify_anthropic_request,
         has_tool_use=_request_uses_tools_anthropic(body),
         allowed_models=upstream_models,
@@ -981,7 +995,7 @@ async def _handle_messages_non_streaming(
                 args_hash=hash_content(json.dumps(block.get("input", {}))),
             ))
 
-    task_type, task_confidence, sys_hash = _classify_anthropic_request(
+    task_type, task_confidence, sys_hash = await _classify_anthropic_request(
         body, prompt_tokens, completion_tokens,
     )
 
@@ -1074,7 +1088,7 @@ async def _handle_messages_streaming(
             resolved_model = acc.model or model
             tool_calls = acc.tool_call_records
 
-            task_type, task_confidence, sys_hash = _classify_anthropic_request(
+            task_type, task_confidence, sys_hash = await _classify_anthropic_request(
                 body, acc.prompt_tokens, acc.completion_tokens,
             )
 
@@ -1184,7 +1198,7 @@ async def _handle_messages_via_openai(
             ))
         break
 
-    task_type, task_confidence, sys_hash = _classify_anthropic_request(
+    task_type, task_confidence, sys_hash = await _classify_anthropic_request(
         anthropic_body, prompt_tokens, completion_tokens,
     )
 
@@ -1311,7 +1325,7 @@ async def _handle_messages_via_openai_streaming(
 
             latency_ms = (time.monotonic() - mono_start) * 1000
             resolved_model = acc.model or model
-            task_type, task_confidence, sys_hash = _classify_anthropic_request(
+            task_type, task_confidence, sys_hash = await _classify_anthropic_request(
                 anthropic_body, acc.prompt_tokens, acc.completion_tokens,
             )
 

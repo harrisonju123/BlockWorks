@@ -633,11 +633,12 @@ def _make_routing_request(confidence_threshold=0.7, routing_enabled=True):
 class TestConfidenceGate:
     """Confidence gate in _maybe_route: low confidence → passthrough."""
 
-    def test_high_confidence_routes(self):
+    @pytest.mark.asyncio
+    async def test_high_confidence_routes(self):
         """Confidence above threshold → routing proceeds normally."""
         request = _make_routing_request(confidence_threshold=0.7)
 
-        def classify_fn(body, pt, ct):
+        async def classify_fn(body, pt, ct):
             return TaskType.CODE_GENERATION, 0.85, "hash123"
 
         with pytest.MonkeyPatch.context() as mp:
@@ -651,7 +652,7 @@ class TestConfidenceGate:
             mp.setattr("blockthrough.api.routes.proxy.resolve", lambda **kw: routed)
             mp.setattr("blockthrough.api.routes.proxy.record_decision", lambda d: None)
 
-            model, decision, (tt, conf, sh) = _maybe_route(
+            model, decision, (tt, conf, sh) = await _maybe_route(
                 request,
                 {"messages": [{"role": "user", "content": "write a function"}]},
                 "claude-sonnet-4-20250514",
@@ -662,14 +663,15 @@ class TestConfidenceGate:
         assert decision.was_overridden is True
         assert decision.confidence == 0.85
 
-    def test_low_confidence_passthrough(self):
+    @pytest.mark.asyncio
+    async def test_low_confidence_passthrough(self):
         """Confidence below threshold → passthrough, keep requested model."""
         request = _make_routing_request(confidence_threshold=0.7)
 
-        def classify_fn(body, pt, ct):
+        async def classify_fn(body, pt, ct):
             return TaskType.CONVERSATION, 0.4, "hash456"
 
-        model, decision, (tt, conf, sh) = _maybe_route(
+        model, decision, (tt, conf, sh) = await _maybe_route(
             request,
             {"messages": [{"role": "user", "content": "hello"}]},
             "claude-sonnet-4-20250514",
@@ -682,14 +684,15 @@ class TestConfidenceGate:
         assert "classifier confidence" in decision.reason
         assert "0.40" in decision.reason
 
-    def test_none_confidence_passthrough(self):
+    @pytest.mark.asyncio
+    async def test_none_confidence_passthrough(self):
         """None confidence → passthrough."""
         request = _make_routing_request(confidence_threshold=0.7)
 
-        def classify_fn(body, pt, ct):
+        async def classify_fn(body, pt, ct):
             return TaskType.CONVERSATION, None, "hash789"
 
-        model, decision, (tt, conf, sh) = _maybe_route(
+        model, decision, (tt, conf, sh) = await _maybe_route(
             request,
             {"messages": [{"role": "user", "content": "hey"}]},
             "claude-sonnet-4-20250514",
@@ -701,11 +704,12 @@ class TestConfidenceGate:
         assert decision.was_overridden is False
         assert "classifier confidence" in decision.reason
 
-    def test_confidence_at_threshold_routes(self):
+    @pytest.mark.asyncio
+    async def test_confidence_at_threshold_routes(self):
         """Confidence exactly at threshold (0.7) → routing proceeds (gate is <, not <=)."""
         request = _make_routing_request(confidence_threshold=0.7)
 
-        def classify_fn(body, pt, ct):
+        async def classify_fn(body, pt, ct):
             return TaskType.CODE_GENERATION, 0.7, "hash_exact"
 
         with pytest.MonkeyPatch.context() as mp:
@@ -718,7 +722,7 @@ class TestConfidenceGate:
             mp.setattr("blockthrough.api.routes.proxy.resolve", lambda **kw: routed)
             mp.setattr("blockthrough.api.routes.proxy.record_decision", lambda d: None)
 
-            model, decision, (tt, conf, sh) = _maybe_route(
+            model, decision, (tt, conf, sh) = await _maybe_route(
                 request,
                 {"messages": [{"role": "user", "content": "write code"}]},
                 "claude-sonnet-4-20250514",
@@ -728,11 +732,12 @@ class TestConfidenceGate:
         assert model == "claude-haiku-4-5-20251001"
         assert decision.was_overridden is True
 
-    def test_plan_mode_ignores_confidence(self):
+    @pytest.mark.asyncio
+    async def test_plan_mode_ignores_confidence(self):
         """Plan mode → force Opus regardless of confidence."""
         request = _make_routing_request(confidence_threshold=0.7)
 
-        def classify_fn(body, pt, ct):
+        async def classify_fn(body, pt, ct):
             return TaskType.CONVERSATION, 0.3, "hash_plan"
 
         body = {"messages": [
@@ -740,7 +745,7 @@ class TestConfidenceGate:
             {"role": "user", "content": "Design an API"},
         ]}
 
-        model, decision, _ = _maybe_route(
+        model, decision, _ = await _maybe_route(
             request, body, "claude-sonnet-4-20250514", classify_fn,
         )
 

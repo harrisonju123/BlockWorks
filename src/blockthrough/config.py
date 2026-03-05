@@ -29,6 +29,8 @@ class BlockThroughConfig(BaseSettings):
     # Classifier
     classifier_confidence_threshold: float = 0.7
     classifier_use_ml: bool = False
+    classifier_model: str = "google.gemma-3-27b-it"
+    classifier_llm_timeout_s: float = 2.0
 
     # Proxy — upstream for OpenAI-compatible traffic (/v1/chat/completions)
     upstream_url: str = "http://localhost:4000"
