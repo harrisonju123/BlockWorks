@@ -12,9 +12,9 @@ import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from agentproof.compliance.builder import build_audit_record_from_row
-from agentproof.compliance.export import export_csv, export_json
-from agentproof.compliance.report import generate_audit_report
+from blockthrough.compliance.builder import build_audit_record_from_row
+from blockthrough.compliance.export import export_csv, export_json
+from blockthrough.compliance.report import generate_audit_report
 
 
 def _make_row(**overrides) -> dict:

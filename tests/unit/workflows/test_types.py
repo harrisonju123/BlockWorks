@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from agentproof.workflows.types import (
+from blockthrough.workflows.types import (
     PaymentSplit,
     StepResult,
     StepType,

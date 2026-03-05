@@ -6,14 +6,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from agentproof.governance.engine import (
+from blockthrough.governance.engine import (
     AlreadyVotedError,
     GovernanceEngine,
     InsufficientTokensError,
     ProposalNotFoundError,
     VotingClosedError,
 )
-from agentproof.governance.types import (
+from blockthrough.governance.types import (
     GovernanceConfig,
     ProposalStatus,
     VoteSupport,

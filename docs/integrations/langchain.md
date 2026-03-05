@@ -1,11 +1,11 @@
 # LangChain Integration
 
-Route LangChain LLM calls through AgentProof's LiteLLM proxy to capture every request for observability, cost tracking, and task classification.
+Route LangChain LLM calls through BlockThrough's LiteLLM proxy to capture every request for observability, cost tracking, and task classification.
 
 ## Prerequisites
 
 - Docker running locally
-- AgentProof stack up: `docker compose up -d`
+- BlockThrough stack up: `docker compose up -d`
 - Your LLM provider API key(s) set in `.env` (Anthropic, OpenAI, etc.)
 - LangChain installed:
 
@@ -35,7 +35,7 @@ llm = ChatOpenAI(
     model="claude-sonnet",
 )
 
-response = llm.invoke("What is AgentProof?")
+response = llm.invoke("What is BlockThrough?")
 print(response.content)
 ```
 
@@ -60,14 +60,14 @@ llm = ChatOpenAI(
 
 ## Approach 2: LiteLLM SDK callback
 
-Use LiteLLM's Python SDK as a drop-in replacement for direct provider calls. LiteLLM automatically triggers the AgentProof callback.
+Use LiteLLM's Python SDK as a drop-in replacement for direct provider calls. LiteLLM automatically triggers the BlockThrough callback.
 
 ```python
 from litellm import completion
 
 response = completion(
     model="claude-sonnet",
-    messages=[{"role": "user", "content": "What is AgentProof?"}],
+    messages=[{"role": "user", "content": "What is BlockThrough?"}],
     api_base="http://localhost:4000/v1",
     api_key="sk-local-dev-key",
 )
@@ -79,7 +79,7 @@ This approach is useful when you have custom code that calls models directly rat
 
 ## Passing Trace Metadata
 
-AgentProof extracts trace context from LiteLLM metadata. To correlate events with specific sessions or traces, pass metadata through the `model_kwargs` parameter:
+BlockThrough extracts trace context from LiteLLM metadata. To correlate events with specific sessions or traces, pass metadata through the `model_kwargs` parameter:
 
 ```python
 llm = ChatOpenAI(
@@ -100,7 +100,7 @@ llm = ChatOpenAI(
 )
 ```
 
-The metadata fields that AgentProof recognizes:
+The metadata fields that BlockThrough recognizes:
 
 | Field | Purpose |
 |---|---|
@@ -137,7 +137,7 @@ After running a LangChain chain through the proxy:
 curl -s http://localhost:8100/api/v1/events | jq '.total_count'
 
 # CLI summary
-agentproof stats
+blockthrough stats
 
 # Dashboard
 open http://localhost:8081
@@ -180,7 +180,7 @@ print(f"Model: {event['model']}, Tokens: {event['total_tokens']}, Cost: ${event[
 
 ## Example: Tool Calling
 
-LangChain tool calls also flow through the proxy and are captured by AgentProof:
+LangChain tool calls also flow through the proxy and are captured by BlockThrough:
 
 ```python
 from langchain_openai import ChatOpenAI
@@ -201,7 +201,7 @@ response = llm.invoke("What's the weather in San Francisco?")
 print(response.tool_calls)
 ```
 
-AgentProof captures the tool call names and argument hashes in the event record.
+BlockThrough captures the tool call names and argument hashes in the event record.
 
 ## Troubleshooting
 
@@ -235,7 +235,7 @@ curl -s http://localhost:4000/v1/models -H "Authorization: Bearer sk-local-dev-k
 
 1. Confirm the API: `curl http://localhost:8100/health`
 2. Confirm the request went through LiteLLM: `docker compose logs litellm --tail=20`
-3. Check for callback errors: `docker compose logs litellm | grep -i "callback\|agentproof"`
+3. Check for callback errors: `docker compose logs litellm | grep -i "callback\|blockthrough"`
 
 **LangChain streaming not working**
 

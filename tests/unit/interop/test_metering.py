@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.interop.metering import (
+from blockthrough.interop.metering import (
     DisputeAlreadyResolvedError,
     DisputeNotFoundError,
     MeteringStore,
 )
-from agentproof.interop.types import (
+from blockthrough.interop.types import (
     DisputeStatus,
     InvocationRequest,
     InvocationResponse,

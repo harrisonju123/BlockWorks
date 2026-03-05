@@ -7,15 +7,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agentproof.benchmarking.eval_set import EvalPrompt, to_messages
-from agentproof.benchmarking.runner import (
+from blockthrough.benchmarking.eval_set import EvalPrompt, to_messages
+from blockthrough.benchmarking.runner import (
     EVAL_ORG_ID,
     BenchmarkRunner,
     PromptResult,
     _EVAL_EVENT_ID,
 )
-from agentproof.pipeline.hasher import hash_content
-from agentproof.types import TaskType
+from blockthrough.pipeline.hasher import hash_content
+from blockthrough.types import TaskType
 
 
 def _make_prompt(task_type: str = "code_generation") -> EvalPrompt:
@@ -174,11 +174,11 @@ class TestRunnerBenchmarkOne:
         prompt_text = json.dumps(messages)
 
         with patch(
-            "agentproof.benchmarking.runner._replay_prompt",
+            "blockthrough.benchmarking.runner._replay_prompt",
             new_callable=AsyncMock,
             return_value=("benchmark response", 0.001, 300.0),
         ), patch(
-            "agentproof.benchmarking.runner.evaluate",
+            "blockthrough.benchmarking.runner.evaluate",
             new_callable=AsyncMock,
             return_value=(0.88, "1.0"),
         ):
@@ -213,7 +213,7 @@ class TestRunnerBenchmarkOne:
         prompt_text = json.dumps(messages)
 
         with patch(
-            "agentproof.benchmarking.runner._replay_prompt",
+            "blockthrough.benchmarking.runner._replay_prompt",
             new_callable=AsyncMock,
             side_effect=litellm.AuthenticationError(
                 message="bad key",
@@ -247,7 +247,7 @@ class TestRunnerBenchmarkOne:
             call_count += 1
             return ("completion", 0.01, 1000.0)
 
-        with patch("agentproof.benchmarking.runner._replay_prompt", side_effect=mock_replay):
+        with patch("blockthrough.benchmarking.runner._replay_prompt", side_effect=mock_replay):
             r1 = await runner._get_reference(prompt, messages)
             r2 = await runner._get_reference(prompt, messages)
 

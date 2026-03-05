@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.api.waste import compute_waste_score
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.models import MODEL_CATALOG as MODEL_COST_TIERS
-from agentproof.types import TaskType
+from blockthrough.api.waste import compute_waste_score
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.models import MODEL_CATALOG as MODEL_COST_TIERS
+from blockthrough.types import TaskType
 
 
 def _row(

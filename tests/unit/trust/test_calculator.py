@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.trust.calculator import TrustCalculator, compute_composite
-from agentproof.trust.types import TrustWeights
+from blockthrough.trust.calculator import TrustCalculator, compute_composite
+from blockthrough.trust.types import TrustWeights
 
 
 class TestComputeComposite:

@@ -14,14 +14,14 @@ from datetime import timedelta
 import asyncpg
 import httpx
 
-from agentproof.utils import utcnow
+from blockthrough.utils import utcnow
 import pytest
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from agentproof.api.app import app
-from agentproof.api.deps import get_db
+from blockthrough.api.app import app
+from blockthrough.api.deps import get_db
 
 pytestmark = pytest.mark.integration
 
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.integration
 # Schema files applied additively: base schema first, then alerts schema
 ALERTS_SCHEMA_PATH = (
     Path(__file__).resolve().parents[2]
-    / "src" / "agentproof" / "pipeline" / "schema_alerts.sql"
+    / "src" / "blockthrough" / "pipeline" / "schema_alerts.sql"
 )
 
 

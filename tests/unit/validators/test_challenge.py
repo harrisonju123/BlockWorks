@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.validators.consensus import ConsensusEngine
-from agentproof.validators.economics import ValidatorEconomics
-from agentproof.validators.registry import ValidatorRegistry
+from blockthrough.validators.consensus import ConsensusEngine
+from blockthrough.validators.economics import ValidatorEconomics
+from blockthrough.validators.registry import ValidatorRegistry
 
 
 # ---------------------------------------------------------------------------

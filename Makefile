@@ -35,7 +35,7 @@ test-integration:
 
 # Run all tests with coverage
 test:
-	pytest tests/ -v --cov=agentproof --cov-report=term-missing
+	pytest tests/ -v --cov=blockthrough --cov-report=term-missing
 
 # Lint and format check
 lint:
@@ -49,16 +49,16 @@ fmt:
 
 # Type check
 typecheck:
-	mypy src/agentproof/
+	mypy src/blockthrough/
 
 # Full CI check
 ci: lint typecheck test
 
-# Launch Claude Code through AgentProof → Anthropic (use with `make dev`)
+# Launch Claude Code through Blockthrough → Anthropic (use with `make dev`)
 claude:
 	ANTHROPIC_BASE_URL=http://localhost:8100 claude
 
-# Launch Claude Code through AgentProof → LiteLLM (use with `make dev-proxy`)
+# Launch Claude Code through Blockthrough → LiteLLM (use with `make dev-proxy`)
 claude-proxy:
 	ANTHROPIC_BASE_URL=http://localhost:8100 claude
 

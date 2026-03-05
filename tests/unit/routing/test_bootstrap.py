@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.config import get_config
-from agentproof.models import MODEL_CATALOG
-from agentproof.routing.policy import (
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.config import get_config
+from blockthrough.models import MODEL_CATALOG
+from blockthrough.routing.policy import (
     _compute_task_threshold,
     bootstrap_policy,
     clear_bootstrap_cache,
     validate_policy,
 )
-from agentproof.routing.router import (
+from blockthrough.routing.router import (
     FitnessCache,
     _TIER_DEFAULTS,
     _get_tier_models,
@@ -21,8 +21,8 @@ from agentproof.routing.router import (
     merge_fitness_entries,
     resolve,
 )
-from agentproof.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
-from agentproof.types import TaskType
+from blockthrough.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
+from blockthrough.types import TaskType
 
 
 @pytest.fixture(autouse=True)

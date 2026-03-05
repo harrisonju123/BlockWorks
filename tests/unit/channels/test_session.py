@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.channels.manager import ChannelError
-from agentproof.channels.session import SessionManager
-from agentproof.channels.types import ChannelConfig
+from blockthrough.channels.manager import ChannelError
+from blockthrough.channels.session import SessionManager
+from blockthrough.channels.types import ChannelConfig
 
 
 # ---------------------------------------------------------------------------

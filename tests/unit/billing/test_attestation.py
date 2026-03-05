@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.billing.attestation import (
+from blockthrough.billing.attestation import (
     _hash_reconciliations,
     create_billing_attestation,
     submit_billing_attestation,
 )
-from agentproof.billing.types import ReconciliationResult
+from blockthrough.billing.types import ReconciliationResult
 
 START = datetime(2026, 3, 1, tzinfo=timezone.utc)
 END = datetime(2026, 4, 1, tzinfo=timezone.utc)

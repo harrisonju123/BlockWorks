@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentproof.attestation.evm_provider import (
+from blockthrough.attestation.evm_provider import (
     EVMProvider,
     _bytes32_to_hex,
     _dt_to_uint40,
@@ -20,7 +20,7 @@ from agentproof.attestation.evm_provider import (
     _tuple_to_record,
     _uint40_to_dt,
 )
-from agentproof.attestation.provider import AttestationError
+from blockthrough.attestation.provider import AttestationError
 
 from .conftest import NOW, PERIOD_END, PERIOD_START, make_record
 
@@ -420,7 +420,7 @@ class TestFactoryIntegration:
         """Factory can auto-discover address from deployments file."""
         import json
 
-        from agentproof.attestation.factory import _load_address_from_deployments
+        from blockthrough.attestation.factory import _load_address_from_deployments
 
         deploy_file = tmp_path / "local.json"
         deploy_file.write_text(json.dumps({
@@ -434,7 +434,7 @@ class TestFactoryIntegration:
         assert addr == "0x5FbDB2315678afecb367f032d93F642f64180aa3"
 
     def test_factory_returns_none_for_missing_file(self) -> None:
-        from agentproof.attestation.factory import _load_address_from_deployments
+        from blockthrough.attestation.factory import _load_address_from_deployments
 
         addr = _load_address_from_deployments("/nonexistent/path.json", "AgentProofAttestation")
         assert addr is None
@@ -442,7 +442,7 @@ class TestFactoryIntegration:
     def test_factory_returns_none_for_missing_contract(self, tmp_path) -> None:
         import json
 
-        from agentproof.attestation.factory import _load_address_from_deployments
+        from blockthrough.attestation.factory import _load_address_from_deployments
 
         deploy_file = tmp_path / "local.json"
         deploy_file.write_text(json.dumps({"contracts": {}}))

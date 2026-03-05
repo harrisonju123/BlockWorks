@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from agentproof.api.app import app
-from agentproof.api.routes.registry import reset_store
+from blockthrough.api.app import app
+from blockthrough.api.routes.registry import reset_store
 
 
 @pytest.fixture(autouse=True)

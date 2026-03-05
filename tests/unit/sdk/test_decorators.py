@@ -1,7 +1,7 @@
 """Tests for SDK decorators and context managers.
 
 Validates that @track_llm_call correctly wraps functions, that
-agentproof_trace groups calls under a shared trace, and that
+blockthrough_trace groups calls under a shared trace, and that
 the provider monkey-patching works as expected.
 """
 
@@ -10,9 +10,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call
 
-from agentproof.sdk.decorators import (
+from blockthrough.sdk.decorators import (
     _get_active_trace,
     agentproof_trace,
+    blockthrough_trace,
     track_anthropic,
     track_llm_call,
     track_openai,
@@ -90,11 +91,11 @@ class TestTrackLLMCall:
         assert mock_client.track.call_args.kwargs["model"] == "custom-model"
 
 
-class TestAgentProofTrace:
+class TestBlockthroughTrace:
 
     def test_trace_context_active_inside_block(self) -> None:
         """Inside the context manager, _get_active_trace() should return the context."""
-        with agentproof_trace("session-1") as trace:
+        with blockthrough_trace("session-1") as trace:
             active = _get_active_trace()
             assert active is not None
             assert active.session_id == "session-1"
@@ -102,21 +103,21 @@ class TestAgentProofTrace:
 
     def test_trace_context_none_outside_block(self) -> None:
         """After exiting, the context var should be reset to None."""
-        with agentproof_trace("session-1"):
+        with blockthrough_trace("session-1"):
             pass
 
         assert _get_active_trace() is None
 
     def test_trace_uses_custom_trace_id(self) -> None:
-        with agentproof_trace("session-1", trace_id="custom-trace") as trace:
+        with blockthrough_trace("session-1", trace_id="custom-trace") as trace:
             assert trace.trace_id == "custom-trace"
 
     def test_trace_auto_generates_trace_id(self) -> None:
-        with agentproof_trace("session-1") as trace:
+        with blockthrough_trace("session-1") as trace:
             assert len(trace.trace_id) > 0  # UUID string
 
     def test_events_list_starts_empty(self) -> None:
-        with agentproof_trace("session-1") as trace:
+        with blockthrough_trace("session-1") as trace:
             assert trace.events == []
 
     def test_nested_calls_share_trace(self) -> None:
@@ -137,7 +138,7 @@ class TestAgentProofTrace:
             captured_trace_ids.append(ctx.trace_id if ctx else None)
             return {"completion": "b", "prompt_tokens": 1, "completion_tokens": 1, "cost": 0}
 
-        with agentproof_trace("session-1") as trace:
+        with blockthrough_trace("session-1") as trace:
             call_1()
             call_2()
 
@@ -188,8 +189,8 @@ class TestTrackOpenAI:
         original_create.assert_called_once()
         assert result is mock_result
 
-    def test_patched_create_reports_to_agentproof(self) -> None:
-        """When an agentproof_client is provided, track() should be called."""
+    def test_patched_create_reports_to_blockthrough(self) -> None:
+        """When an blockthrough_client is provided, track() should be called."""
         usage = SimpleNamespace(prompt_tokens=10, completion_tokens=5)
         message = SimpleNamespace(content="hello")
         choice = SimpleNamespace(message=message)
@@ -205,7 +206,7 @@ class TestTrackOpenAI:
         )
         mock_ap = MagicMock()
 
-        track_openai(mock_openai, agentproof_client=mock_ap)
+        track_openai(mock_openai, blockthrough_client=mock_ap)
         mock_openai.chat.completions.create(
             model="gpt-4o", messages=[{"role": "user", "content": "hi"}]
         )
@@ -253,7 +254,7 @@ class TestTrackAnthropic:
         original_create.assert_called_once()
         assert result is mock_result
 
-    def test_patched_create_reports_to_agentproof(self) -> None:
+    def test_patched_create_reports_to_blockthrough(self) -> None:
         usage = SimpleNamespace(input_tokens=10, output_tokens=5)
         content_block = SimpleNamespace(text="response")
         mock_result = SimpleNamespace(
@@ -266,7 +267,7 @@ class TestTrackAnthropic:
         )
         mock_ap = MagicMock()
 
-        track_anthropic(mock_anthropic, agentproof_client=mock_ap)
+        track_anthropic(mock_anthropic, blockthrough_client=mock_ap)
         mock_anthropic.messages.create(
             model="claude-sonnet-4-20250514",
             messages=[{"role": "user", "content": "hi"}],

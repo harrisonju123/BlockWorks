@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from agentproof.attestation.types import AttestationRecord
+from blockthrough.attestation.types import AttestationRecord
 
 NOW = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
 PERIOD_START = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)

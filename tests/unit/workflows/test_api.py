@@ -9,9 +9,9 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from agentproof.api.app import app
-from agentproof.api.routes.workflows import reset_workflows
-from agentproof.config import get_config
+from blockthrough.api.app import app
+from blockthrough.api.routes.workflows import reset_workflows
+from blockthrough.config import get_config
 
 
 @pytest.fixture(autouse=True)

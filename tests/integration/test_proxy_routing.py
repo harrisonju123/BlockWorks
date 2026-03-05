@@ -18,12 +18,12 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from agentproof.api.app import app
-from agentproof.api.routes.routing import _recent_decisions
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.routing.router import FitnessCache
-from agentproof.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
-from agentproof.types import LLMEvent
+from blockthrough.api.app import app
+from blockthrough.api.routes.routing import _recent_decisions
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.routing.router import FitnessCache
+from blockthrough.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
+from blockthrough.types import LLMEvent
 
 pytestmark = pytest.mark.integration
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed realistic demo data for the AgentProof dashboard.
+"""Seed realistic demo data for the Blockthrough dashboard.
 
 Standalone script using asyncpg (matching EventWriter._flush pattern).
 Designed to run inside the api container:
@@ -34,20 +34,20 @@ from pathlib import Path
 
 import asyncpg
 
-from agentproof.attestation.builder import ZERO_HASH
-from agentproof.attestation.hashing import (
+from blockthrough.attestation.builder import ZERO_HASH
+from blockthrough.attestation.hashing import (
     build_merkle_root,
     compute_chain_hash,
     hash_metrics,
     hash_org_id,
 )
-from agentproof.attestation.types import AttestationMetrics, AttestationRecord, TraceEvaluation
+from blockthrough.attestation.types import AttestationMetrics, AttestationRecord, TraceEvaluation
 
-from agentproof.waste.suggest import _SIMPLE_TASKS as _SIMPLE_TASK_ENUMS
-from agentproof.models import MODEL_CATALOG
-from agentproof.pipeline.writer import _EVENT_COLUMNS, _TOOL_CALL_COLUMNS
-from agentproof.types import EventStatus, TaskType
-from agentproof.utils import infer_provider, utcnow
+from blockthrough.waste.suggest import _SIMPLE_TASKS as _SIMPLE_TASK_ENUMS
+from blockthrough.models import MODEL_CATALOG
+from blockthrough.pipeline.writer import _EVENT_COLUMNS, _TOOL_CALL_COLUMNS
+from blockthrough.types import EventStatus, TaskType
+from blockthrough.utils import infer_provider, utcnow
 
 # ---------------------------------------------------------------------------
 # Constants

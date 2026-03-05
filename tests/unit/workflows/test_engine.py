@@ -12,17 +12,17 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.config import get_config
-from agentproof.registry.store import RegistryStore
-from agentproof.registry.types import AgentListing, ListingCategory
-from agentproof.workflows.engine import (
+from blockthrough.config import get_config
+from blockthrough.registry.store import RegistryStore
+from blockthrough.registry.types import AgentListing, ListingCategory
+from blockthrough.workflows.engine import (
     WorkflowValidationError,
     _detect_cycles,
     execute_workflow,
     topological_sort,
     validate_workflow,
 )
-from agentproof.workflows.types import (
+from blockthrough.workflows.types import (
     StepResult,
     StepType,
     WorkflowDefinition,

@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.channels.manager import ChannelManager
-from agentproof.channels.types import ChannelConfig
-from agentproof.revenue.calculator import calculate_shares
-from agentproof.revenue.settlement import SettlementEngine, SettlementError
-from agentproof.revenue.types import RevenueConfig, SplitBasis, SplitRule
+from blockthrough.channels.manager import ChannelManager
+from blockthrough.channels.types import ChannelConfig
+from blockthrough.revenue.calculator import calculate_shares
+from blockthrough.revenue.settlement import SettlementEngine, SettlementError
+from blockthrough.revenue.types import RevenueConfig, SplitBasis, SplitRule
 
 
 # ---------------------------------------------------------------------------

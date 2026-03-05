@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentproof.pipeline.writer import EventWriter
-from agentproof.types import EventStatus, LLMEvent
+from blockthrough.pipeline.writer import EventWriter
+from blockthrough.types import EventStatus, LLMEvent
 
 
 def _make_event(**overrides) -> LLMEvent:
@@ -157,14 +157,14 @@ class TestEventWriterShutdown:
 
 
 class TestCallbackClose:
-    """Verify AgentProofCallback.close() orchestrates writer shutdown."""
+    """Verify BlockThroughCallback.close() orchestrates writer shutdown."""
 
     @pytest.mark.asyncio
     async def test_close_calls_shutdown_and_awaits_task(self) -> None:
         """close() should signal shutdown, then wait for the writer task to finish."""
-        from agentproof.pipeline.callback import AgentProofCallback
+        from blockthrough.pipeline.callback import BlockThroughCallback
 
-        cb = AgentProofCallback(db_url="postgresql+asyncpg://x")
+        cb = BlockThroughCallback(db_url="postgresql+asyncpg://x")
 
         # Simulate a running writer
         mock_writer = AsyncMock()
@@ -183,9 +183,9 @@ class TestCallbackClose:
     @pytest.mark.asyncio
     async def test_close_noop_when_no_writer(self) -> None:
         """close() on a callback that never started writing should be safe."""
-        from agentproof.pipeline.callback import AgentProofCallback
+        from blockthrough.pipeline.callback import BlockThroughCallback
 
-        cb = AgentProofCallback(db_url="postgresql+asyncpg://x")
+        cb = BlockThroughCallback(db_url="postgresql+asyncpg://x")
         await cb.close()
         assert cb._writer is None
         assert cb._writer_task is None
@@ -193,9 +193,9 @@ class TestCallbackClose:
     @pytest.mark.asyncio
     async def test_close_cancels_on_timeout(self) -> None:
         """If the writer task exceeds the timeout, close() should cancel it."""
-        from agentproof.pipeline.callback import AgentProofCallback
+        from blockthrough.pipeline.callback import BlockThroughCallback
 
-        cb = AgentProofCallback(db_url="postgresql+asyncpg://x")
+        cb = BlockThroughCallback(db_url="postgresql+asyncpg://x")
 
         mock_writer = AsyncMock()
         cb._writer = mock_writer

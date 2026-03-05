@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentproof.benchmarking.drift import (
+from blockthrough.benchmarking.drift import (
     DEGRADATION_THRESHOLD_PCT,
     MIN_SAMPLE_SIZE,
     SIGNIFICANCE_LEVEL,

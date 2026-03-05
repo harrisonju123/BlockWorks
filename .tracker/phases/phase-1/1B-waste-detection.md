@@ -21,10 +21,10 @@ Analyze usage patterns and flag specific waste categories with dollar amounts.
 
 ## Technical Notes
 
-- `src/agentproof/waste/` package: types, 5 detectors, analyzer, report formatter
+- `src/blockthrough/waste/` package: types, 5 detectors, analyzer, report formatter
 - Each detector is a pure function (mock-testable, no DB coupling)
 - Analyzer orchestrates all detectors and computes overall waste_score
-- CLI: `agentproof waste-report`
+- CLI: `blockthrough waste-report`
 - API: `GET /api/v1/stats/waste/details` (backward-compatible with existing /waste-score)
 - 68 unit tests
 

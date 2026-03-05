@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.types import EventStatus, LLMEvent
+from blockthrough.types import EventStatus, LLMEvent
 
 
 @pytest.fixture

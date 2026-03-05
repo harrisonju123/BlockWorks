@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.channels.manager import ChannelManager
-from agentproof.channels.types import ChannelConfig
-from agentproof.workflows.payments import (
+from blockthrough.channels.manager import ChannelManager
+from blockthrough.channels.types import ChannelConfig
+from blockthrough.workflows.payments import (
     MINIMUM_PAYMENT,
     calculate_splits,
     settle_workflow,
 )
-from agentproof.workflows.types import (
+from blockthrough.workflows.types import (
     StepResult,
     WorkflowExecution,
     WorkflowExecutionStatus,
@@ -166,7 +166,7 @@ class TestSettleWorkflow:
 
     @pytest.mark.asyncio
     async def test_settle_creates_channels(self) -> None:
-        from agentproof.workflows.types import PaymentSplit
+        from blockthrough.workflows.types import PaymentSplit
 
         splits = [
             PaymentSplit(step_id="a", listing_id="l1", amount=0.01, percentage_of_total=50.0),
@@ -184,7 +184,7 @@ class TestSettleWorkflow:
 
     @pytest.mark.asyncio
     async def test_settle_skips_dust_payments(self) -> None:
-        from agentproof.workflows.types import PaymentSplit
+        from blockthrough.workflows.types import PaymentSplit
 
         splits = [
             PaymentSplit(step_id="a", listing_id="l1", amount=0.0001, percentage_of_total=100.0),
@@ -202,7 +202,7 @@ class TestSettleWorkflow:
 
     @pytest.mark.asyncio
     async def test_settle_payment_amounts_correct(self) -> None:
-        from agentproof.workflows.types import PaymentSplit
+        from blockthrough.workflows.types import PaymentSplit
 
         splits = [
             PaymentSplit(step_id="a", listing_id="l1", amount=0.05, percentage_of_total=100.0),

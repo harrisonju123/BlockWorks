@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentproof.billing.aggregator import aggregate_usage
+from blockthrough.billing.aggregator import aggregate_usage
 
 
 def _make_row(

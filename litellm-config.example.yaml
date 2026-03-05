@@ -1,8 +1,8 @@
 # =============================================================================
-# AgentProof LiteLLM Proxy Configuration
+# Blockthrough LiteLLM Proxy Configuration
 # =============================================================================
 # This proxy sits between AI coding agents (Claude Code, OpenCode, etc.) and
-# the upstream LLM providers. Every request flows through the AgentProof
+# the upstream LLM providers. Every request flows through the Blockthrough
 # callback, which captures events for observability without blocking the
 # request path.
 #
@@ -106,8 +106,13 @@ model_list:
       model: o3-mini
       api_key: os.environ/OPENAI_API_KEY
 
+  - model_name: gpt-5.2-chat-latest
+    litellm_params:
+      model: gpt-5.2-chat-latest
+      api_key: os.environ/OPENAI_API_KEY
+
 # -- LiteLLM settings --------------------------------------------------------
-# callbacks:    AgentProof's custom callback captures every request/response.
+# callbacks:    Blockthrough's custom callback captures every request/response.
 #               The callback hashes content, classifies the task, and writes
 #               events to TimescaleDB asynchronously (never blocks the LLM call).
 # drop_params:  Silently drop params the upstream provider doesn't support,
@@ -116,7 +121,7 @@ model_list:
 # set_verbose:  Keep false in normal use. Set true to debug routing issues.
 # -----------------------------------------------------------------------------
 litellm_settings:
-  callbacks: ["agentproof.pipeline.callback.AgentProofCallback"]
+  callbacks: ["blockthrough.pipeline.callback.BlockThroughCallback"]
   set_verbose: false
   drop_params: true
 

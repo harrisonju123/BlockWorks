@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.trust.registry import (
+from blockthrough.trust.registry import (
     AgentAlreadyRegisteredError,
     AgentNotRegisteredError,
     TrustRegistry,
 )
-from agentproof.trust.types import TrustDimension, TrustWeights
+from blockthrough.trust.types import TrustDimension, TrustWeights
 
 
 class TestRegisterAgent:

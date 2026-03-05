@@ -10,14 +10,14 @@ import json
 
 import pytest
 
-from agentproof.workflows.serialization import (
+from blockthrough.workflows.serialization import (
     SerializationError,
     from_json,
     from_yaml,
     to_json,
     to_yaml,
 )
-from agentproof.workflows.types import (
+from blockthrough.workflows.types import (
     StepType,
     WorkflowDefinition,
     WorkflowStep,

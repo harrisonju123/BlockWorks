@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.waste.detectors.cache_misses import detect_cache_misses
-from agentproof.waste.types import WasteCategory, WasteSeverity
+from blockthrough.waste.detectors.cache_misses import detect_cache_misses
+from blockthrough.waste.types import WasteCategory, WasteSeverity
 
 
 def _prompt_dup_row(

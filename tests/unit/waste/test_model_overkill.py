@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.waste.detectors.model_overkill import detect_model_overkill
-from agentproof.waste.types import WasteCategory, WasteSeverity
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.waste.detectors.model_overkill import detect_model_overkill
+from blockthrough.waste.types import WasteCategory, WasteSeverity
 
 
 def _usage_row(

@@ -35,13 +35,13 @@ services:
       POSTGRES_PASSWORD: localdev
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./src/agentproof/pipeline/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      - ./src/agentproof/pipeline/schema_mcp.sql:/docker-entrypoint-initdb.d/02-schema_mcp.sql
-      - ./src/agentproof/pipeline/schema_alerts.sql:/docker-entrypoint-initdb.d/03-schema_alerts.sql
-      - ./src/agentproof/pipeline/schema_benchmarks.sql:/docker-entrypoint-initdb.d/04-schema_benchmarks.sql
-      - ./src/agentproof/pipeline/schema_benchmark_config.sql:/docker-entrypoint-initdb.d/05-schema_benchmark_config.sql
-      - ./src/agentproof/pipeline/schema_routing.sql:/docker-entrypoint-initdb.d/06-schema_routing.sql
-      - ./src/agentproof/pipeline/schema_cache_tokens.sql:/docker-entrypoint-initdb.d/07-schema_cache_tokens.sql
+      - ./src/blockthrough/pipeline/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./src/blockthrough/pipeline/schema_mcp.sql:/docker-entrypoint-initdb.d/02-schema_mcp.sql
+      - ./src/blockthrough/pipeline/schema_alerts.sql:/docker-entrypoint-initdb.d/03-schema_alerts.sql
+      - ./src/blockthrough/pipeline/schema_benchmarks.sql:/docker-entrypoint-initdb.d/04-schema_benchmarks.sql
+      - ./src/blockthrough/pipeline/schema_benchmark_config.sql:/docker-entrypoint-initdb.d/05-schema_benchmark_config.sql
+      - ./src/blockthrough/pipeline/schema_routing.sql:/docker-entrypoint-initdb.d/06-schema_routing.sql
+      - ./src/blockthrough/pipeline/schema_cache_tokens.sql:/docker-entrypoint-initdb.d/07-schema_cache_tokens.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentproof"]
       interval: 5s
@@ -55,7 +55,7 @@ services:
       - "4000:4000"
     volumes:
       - ./litellm-config.example.yaml:/app/config.yaml
-      - ./src/agentproof:/app/agentproof
+      - ./src/blockthrough:/app/blockthrough
       - ./pyproject.toml:/app/pyproject.toml
     entrypoint: ["sh", "-c", "pip install --no-cache-dir /app && litellm --config /app/config.yaml --port 4000"]
     environment:
@@ -97,7 +97,7 @@ services:
         condition: service_healthy
       deploy:
         condition: service_completed_successfully
-    command: ["uvicorn", "agentproof.api.app:app", "--host", "0.0.0.0", "--port", "8100", "--reload"]
+    command: ["uvicorn", "blockthrough.api.app:app", "--host", "0.0.0.0", "--port", "8100", "--reload"]
 
   dashboard:
     image: node:20-slim

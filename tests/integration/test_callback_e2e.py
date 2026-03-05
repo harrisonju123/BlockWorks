@@ -11,7 +11,7 @@ import asyncio
 import asyncpg
 import pytest
 
-from agentproof.pipeline.callback import AgentProofCallback
+from blockthrough.pipeline.callback import BlockThroughCallback
 
 from .conftest import make_callback, make_litellm_kwargs, wait_for_flush
 
@@ -20,13 +20,13 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def callback(db_url: str, _apply_schema) -> AgentProofCallback:
+def callback(db_url: str, _apply_schema) -> BlockThroughCallback:
     return make_callback(db_url)
 
 
 class TestSuccessEvent:
 
-    async def test_event_persisted(self, callback: AgentProofCallback, clean_db: asyncpg.Pool):
+    async def test_event_persisted(self, callback: BlockThroughCallback, clean_db: asyncpg.Pool):
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs()
 
         await callback.async_log_success_event(kwargs, response_obj, start_time, end_time)
@@ -34,7 +34,7 @@ class TestSuccessEvent:
         count = await wait_for_flush(clean_db, expected=1)
         assert count == 1
 
-    async def test_field_values(self, callback: AgentProofCallback, clean_db: asyncpg.Pool):
+    async def test_field_values(self, callback: BlockThroughCallback, clean_db: asyncpg.Pool):
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs(
             model="gpt-4o",
             provider="openai",
@@ -58,7 +58,7 @@ class TestSuccessEvent:
         assert row["org_id"] == "test-org"
         assert abs(row["estimated_cost"] - 0.005) < 1e-6
 
-    async def test_hashes_populated(self, callback: AgentProofCallback, clean_db: asyncpg.Pool):
+    async def test_hashes_populated(self, callback: BlockThroughCallback, clean_db: asyncpg.Pool):
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs()
 
         await callback.async_log_success_event(kwargs, response_obj, start_time, end_time)
@@ -75,7 +75,7 @@ class TestSuccessEvent:
         assert len(row["system_prompt_hash"]) == 64
 
     async def test_classification_populated(
-        self, callback: AgentProofCallback, clean_db: asyncpg.Pool
+        self, callback: BlockThroughCallback, clean_db: asyncpg.Pool
     ):
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs(
             messages=[
@@ -97,7 +97,7 @@ class TestSuccessEvent:
 
 class TestFailureEvent:
 
-    async def test_failure_persisted(self, callback: AgentProofCallback, clean_db: asyncpg.Pool):
+    async def test_failure_persisted(self, callback: BlockThroughCallback, clean_db: asyncpg.Pool):
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs(
             exception=ValueError("Rate limit exceeded"),
         )
@@ -117,7 +117,7 @@ class TestFailureEvent:
 class TestToolCalls:
 
     async def test_tool_calls_persisted(
-        self, callback: AgentProofCallback, clean_db: asyncpg.Pool
+        self, callback: BlockThroughCallback, clean_db: asyncpg.Pool
     ):
         kwargs, response_obj, start_time, end_time = make_litellm_kwargs(
             tool_calls=[
@@ -146,7 +146,7 @@ class TestToolCalls:
 
 class TestBatchFlush:
 
-    async def test_multiple_events(self, callback: AgentProofCallback, clean_db: asyncpg.Pool):
+    async def test_multiple_events(self, callback: BlockThroughCallback, clean_db: asyncpg.Pool):
         for i in range(15):
             kwargs, response_obj, start_time, end_time = make_litellm_kwargs(
                 model=f"model-{i % 3}",
@@ -182,7 +182,7 @@ class TestQueueFull:
 class TestMixedEvents:
 
     async def test_mixed_success_and_failure(
-        self, callback: AgentProofCallback, clean_db: asyncpg.Pool
+        self, callback: BlockThroughCallback, clean_db: asyncpg.Pool
     ):
         for _ in range(3):
             kwargs, resp, st, et = make_litellm_kwargs()

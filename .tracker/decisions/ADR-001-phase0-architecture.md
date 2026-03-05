@@ -9,7 +9,7 @@
 
 ## Context
 
-AgentProof is an AI agent observability, benchmarking, and attestation platform built on LiteLLM. Phase 0 establishes the foundation: a data pipeline that captures every LLM call, a classifier that labels each call by task type, a CLI and dashboard for visibility, and integration validation with major agent frameworks. Six engineers will work in parallel across four initiatives (0A, 0B, 0C, 0D). This document defines the architecture such that all six can begin work without further clarification.
+BlockThrough is an AI agent observability, benchmarking, and attestation platform built on LiteLLM. Phase 0 establishes the foundation: a data pipeline that captures every LLM call, a classifier that labels each call by task type, a CLI and dashboard for visibility, and integration validation with major agent frameworks. Six engineers will work in parallel across four initiatives (0A, 0B, 0C, 0D). This document defines the architecture such that all six can begin work without further clarification.
 
 ---
 
@@ -35,7 +35,7 @@ A single repository using Python namespace packages for backend components and a
 ### Directory Structure
 
 ```
-agentproof/
+blockthrough/
   pyproject.toml                    # Root project config (hatch build system)
   docker-compose.yml                # Local dev stack
   docker-compose.ci.yml             # CI-specific overrides
@@ -47,7 +47,7 @@ agentproof/
       integration.yml               # Integration tests (Docker-based)
 
   src/
-    agentproof/
+    blockthrough/
       __init__.py
       py.typed                      # PEP 561 marker
 
@@ -91,8 +91,8 @@ agentproof/
         __init__.py
         main.py                     # Typer app entry point
         commands/
-          stats.py                  # agentproof stats
-          config.py                 # agentproof config
+          stats.py                  # blockthrough stats
+          config.py                 # blockthrough config
 
       # --- Shared ---
       db/
@@ -302,8 +302,8 @@ These tasks require zero input from other streams:
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Framework | Typer 0.15+ | Type-hint-driven, auto-generates help text, built on Click. Pythonic. |
-| Output formatting | Rich 13+ | Tables, progress bars, colored output. Makes `agentproof stats` output professional. |
-| Configuration | `~/.agentproof/config.toml` | TOML for human readability. Store DB connection string, default time range, output format preferences. |
+| Output formatting | Rich 13+ | Tables, progress bars, colored output. Makes `blockthrough stats` output professional. |
+| Configuration | `~/.blockthrough/config.toml` | TOML for human readability. Store DB connection string, default time range, output format preferences. |
 
 ### Dashboard
 
@@ -352,7 +352,7 @@ These contracts are the integration boundaries. Each team codes to these interfa
 The canonical event produced by the LiteLLM callback handler. This is the single most important interface in the system.
 
 ```python
-# src/agentproof/types.py
+# src/blockthrough/types.py
 
 from __future__ import annotations
 
@@ -450,7 +450,7 @@ class LLMEvent(BaseModel):
 ### 4.2 Database Schema
 
 ```sql
--- src/agentproof/pipeline/schema.sql
+-- src/blockthrough/pipeline/schema.sql
 
 -- Enable TimescaleDB
 CREATE EXTENSION IF NOT EXISTS timescaledb;
@@ -756,10 +756,10 @@ GET /events/{event_id}
 The classifier produces a `ClassificationResult` that gets merged into the `LLMEvent` before storage.
 
 ```python
-# src/agentproof/classifier/taxonomy.py
+# src/blockthrough/classifier/taxonomy.py
 
 from pydantic import BaseModel
-from agentproof.types import TaskType
+from blockthrough.types import TaskType
 
 
 class ClassificationResult(BaseModel):
@@ -798,14 +798,14 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: agentproof
-      POSTGRES_USER: agentproof
+      POSTGRES_DB: blockthrough
+      POSTGRES_USER: blockthrough
       POSTGRES_PASSWORD: localdev
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./src/agentproof/pipeline/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./src/blockthrough/pipeline/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentproof"]
+      test: ["CMD-SHELL", "pg_isready -U blockthrough"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -819,7 +819,7 @@ services:
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
       LITELLM_MASTER_KEY: sk-local-dev-key
-      DATABASE_URL: postgresql://agentproof:localdev@db:5432/agentproof
+      DATABASE_URL: postgresql://blockthrough:localdev@db:5432/blockthrough
     depends_on:
       db:
         condition: service_healthy
@@ -834,12 +834,12 @@ services:
     volumes:
       - ./src:/app/src
     environment:
-      DATABASE_URL: postgresql+asyncpg://agentproof:localdev@db:5432/agentproof
+      DATABASE_URL: postgresql+asyncpg://blockthrough:localdev@db:5432/blockthrough
       AGENTPROOF_ENV: development
     depends_on:
       db:
         condition: service_healthy
-    command: ["uvicorn", "agentproof.api.app:app", "--host", "0.0.0.0", "--port", "8100", "--reload"]
+    command: ["uvicorn", "blockthrough.api.app:app", "--host", "0.0.0.0", "--port", "8100", "--reload"]
 
 volumes:
   pgdata:
@@ -862,9 +862,9 @@ Phase 1 initiatives (1A, 1D, 1E) build directly on Phase 0 outputs. The followin
 
 #### 5.2 Frozen Interface: Callback Handler Plugin API
 
-- The `AgentProofCallback` class must expose a stable constructor signature:
+- The `BlockThroughCallback` class must expose a stable constructor signature:
   ```python
-  AgentProofCallback(
+  BlockThroughCallback(
       db_url: str,
       org_id: str | None = None,
       enable_classification: bool = True,
@@ -1077,7 +1077,7 @@ Phase 0 is internal tooling. There is no external rollout. The "release" is:
 Reference implementation for 0A-2. This is not production code but establishes the pattern:
 
 ```python
-# src/agentproof/pipeline/callback.py
+# src/blockthrough/pipeline/callback.py
 
 import asyncio
 import hashlib
@@ -1089,11 +1089,11 @@ from typing import Any
 
 from litellm.integrations.custom_logger import CustomLogger
 
-from agentproof.classifier.taxonomy import ClassificationResult
-from agentproof.types import EventStatus, LLMEvent, ToolCallRecord
+from blockthrough.classifier.taxonomy import ClassificationResult
+from blockthrough.types import EventStatus, LLMEvent, ToolCallRecord
 
 
-class AgentProofCallback(CustomLogger):
+class BlockThroughCallback(CustomLogger):
     """Async LiteLLM callback that captures events to TimescaleDB.
 
     All DB writes happen via a background task that drains an in-memory
@@ -1168,18 +1168,18 @@ class AgentProofCallback(CustomLogger):
 ## Appendix B: Configuration Schema
 
 ```python
-# src/agentproof/config.py
+# src/blockthrough/config.py
 
 from pydantic_settings import BaseSettings
 
 
-class AgentProofConfig(BaseSettings):
+class BlockThroughConfig(BaseSettings):
     """All configuration via environment variables, with sensible defaults."""
 
     model_config = {"env_prefix": "AGENTPROOF_"}
 
     # Database
-    database_url: str = "postgresql+asyncpg://agentproof:localdev@localhost:5432/agentproof"
+    database_url: str = "postgresql+asyncpg://blockthrough:localdev@localhost:5432/blockthrough"
 
     # Pipeline
     pipeline_batch_size: int = 50

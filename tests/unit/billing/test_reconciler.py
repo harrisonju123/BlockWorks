@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.billing.reconciler import NOTABLE_THRESHOLD_PCT, reconcile
-from agentproof.billing.types import InvoiceData, ProviderUsage
+from blockthrough.billing.reconciler import NOTABLE_THRESHOLD_PCT, reconcile
+from blockthrough.billing.types import InvoiceData, ProviderUsage
 
 START = datetime(2026, 3, 1, tzinfo=timezone.utc)
 END = datetime(2026, 4, 1, tzinfo=timezone.utc)

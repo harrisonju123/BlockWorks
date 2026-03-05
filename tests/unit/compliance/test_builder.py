@@ -9,14 +9,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from agentproof.compliance.builder import (
+from blockthrough.compliance.builder import (
     _detect_human_oversight,
     _hash_agent_id,
     build_audit_record_from_row,
     classify_risk,
 )
-from agentproof.compliance.types import DecisionType, RiskLevel
-from agentproof.pipeline.hasher import hash_content
+from blockthrough.compliance.types import DecisionType, RiskLevel
+from blockthrough.pipeline.hasher import hash_content
 
 
 def _make_row(**overrides) -> dict:

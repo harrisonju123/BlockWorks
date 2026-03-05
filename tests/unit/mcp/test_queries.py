@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentproof.db.queries import (
+from blockthrough.db.queries import (
     get_mcp_execution_graph,
     get_mcp_server_stats,
     get_mcp_unused_data,

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from agentproof.benchmarking.targeting import compute_benchmark_targets
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.models import MODEL_CATALOG
+from blockthrough.benchmarking.targeting import compute_benchmark_targets
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.models import MODEL_CATALOG
 
 
 def _usage_row(

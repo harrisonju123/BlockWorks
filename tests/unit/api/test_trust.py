@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from agentproof.api.app import app
-from agentproof.api.routes.trust import get_registry, reset_registry
+from blockthrough.api.app import app
+from blockthrough.api.routes.trust import get_registry, reset_registry
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +53,7 @@ class TestGetTopAgents:
         registry = get_registry()
         registry.register_agent("low")
         registry.register_agent("high")
-        from agentproof.trust.types import TrustDimension
+        from blockthrough.trust.types import TrustDimension
         registry.update_score("high", TrustDimension.RELIABILITY, 0.99)
         registry.update_score("low", TrustDimension.RELIABILITY, 0.1)
 

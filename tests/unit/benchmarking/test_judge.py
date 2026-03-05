@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentproof.benchmarking.judge import (
+from blockthrough.benchmarking.judge import (
     RUBRIC_VERSION,
     _build_judge_prompt,
     _parse_judge_response,
@@ -18,8 +18,8 @@ from agentproof.benchmarking.judge import (
     evaluate,
     get_rubric,
 )
-from agentproof.benchmarking.types import Rubric, RubricCriterion
-from agentproof.types import TaskType
+from blockthrough.benchmarking.types import Rubric, RubricCriterion
+from blockthrough.types import TaskType
 
 
 class TestGetRubric:
@@ -185,7 +185,7 @@ class TestEvaluate:
             "completeness": 0.7,
         })
 
-        with patch("agentproof.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
+        with patch("blockthrough.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = mock_response
             score, version = await evaluate(
                 original_prompt="Write a sort function",
@@ -221,7 +221,7 @@ class TestEvaluate:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = "I cannot score this properly."
 
-        with patch("agentproof.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
+        with patch("blockthrough.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = mock_response
             score, version = await evaluate(
                 original_prompt="Classify this email",
@@ -240,7 +240,7 @@ class TestEvaluate:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = json.dumps({"accuracy": 1.0})
 
-        with patch("agentproof.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
+        with patch("blockthrough.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = mock_response
             score, _ = await evaluate(
                 original_prompt="Classify sentiment",

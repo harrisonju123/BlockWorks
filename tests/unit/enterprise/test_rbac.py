@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agentproof.enterprise.rbac import (
+from blockthrough.enterprise.rbac import (
     add_user,
     authenticate_sso,
     check_permission,
@@ -12,9 +12,9 @@ from agentproof.enterprise.rbac import (
     reset_store,
     update_role,
 )
-from agentproof.enterprise.tenants import create_tenant
-from agentproof.enterprise.tenants import reset_store as reset_tenant_store
-from agentproof.enterprise.types import Permission, Role
+from blockthrough.enterprise.tenants import create_tenant
+from blockthrough.enterprise.tenants import reset_store as reset_tenant_store
+from blockthrough.enterprise.types import Permission, Role
 
 
 class TestAddUser:

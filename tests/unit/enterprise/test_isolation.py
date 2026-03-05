@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from agentproof.enterprise.isolation import (
+from blockthrough.enterprise.isolation import (
     TenantContext,
     get_current_tenant,
     tenant_filter,
 )
-from agentproof.enterprise.types import Plan, Tenant
+from blockthrough.enterprise.types import Plan, Tenant
 
 
 def _make_tenant(**overrides) -> Tenant:

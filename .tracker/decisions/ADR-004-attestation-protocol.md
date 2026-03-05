@@ -58,10 +58,10 @@ The org_id itself never touches the chain. Verification requires knowing the org
 
 #### `metricsHash`
 
-The metrics hash commits to a canonical JSON representation of the period's aggregate numbers. This uses the same `hash_content` function from `src/agentproof/pipeline/hasher.py` to guarantee deterministic serialization.
+The metrics hash commits to a canonical JSON representation of the period's aggregate numbers. This uses the same `hash_content` function from `src/blockthrough/pipeline/hasher.py` to guarantee deterministic serialization.
 
 ```python
-from agentproof.pipeline.hasher import hash_content
+from blockthrough.pipeline.hasher import hash_content
 
 def compute_metrics_hash(
     total_spend: float,
@@ -85,11 +85,11 @@ def compute_metrics_hash(
 
 #### `benchmarkHash`
 
-Commits to the fitness matrix state at attestation time. The matrix is a list of `FitnessEntry` objects (defined in `src/agentproof/benchmarking/types.py`) serialized in a canonical order.
+Commits to the fitness matrix state at attestation time. The matrix is a list of `FitnessEntry` objects (defined in `src/blockthrough/benchmarking/types.py`) serialized in a canonical order.
 
 ```python
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.pipeline.hasher import hash_content
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.pipeline.hasher import hash_content
 
 def compute_benchmark_hash(entries: list[FitnessEntry]) -> str:
     """Hash the fitness matrix snapshot. Sorted by (task_type, model) for determinism."""
@@ -182,7 +182,7 @@ EAS is a general-purpose attestation protocol deployed on Ethereum mainnet and a
 
 **Pros:**
 - Schema registry is already deployed and indexed. No need to deploy or maintain our own registry contract.
-- Existing subgraph and indexer infrastructure. Third parties can discover and verify AgentProof attestations without knowing our contract address.
+- Existing subgraph and indexer infrastructure. Third parties can discover and verify BlockThrough attestations without knowing our contract address.
 - Composability: other protocols can reference our attestations by UID.
 - Revocation support built in (useful if an attestation is found to be based on corrupted data).
 - Active maintenance by the EAS team; security audits already completed.
@@ -195,7 +195,7 @@ EAS is a general-purpose attestation protocol deployed on Ethereum mainnet and a
 
 ### Option B: Custom Smart Contract
 
-A purpose-built `AgentProofAttestation` contract with exactly the storage and access patterns we need.
+A purpose-built `BlockThroughAttestation` contract with exactly the storage and access patterns we need.
 
 **Pros:**
 - Full control over storage layout, gas optimization, and batch operations.
@@ -280,10 +280,10 @@ pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-/// @title AgentProof Attestation Registry
+/// @title BlockThrough Attestation Registry
 /// @notice Stores cryptographic commitments to off-chain AI operations data.
 ///         No raw data touches the chain -- only hashes and Merkle roots.
-contract AgentProofAttestation is Ownable {
+contract BlockThroughAttestation is Ownable {
 
     // ---------------------------------------------------------------
     //  Types
@@ -540,7 +540,7 @@ contract AgentProofAttestation is Ownable {
 ### Access Control
 
 - **Owner:** The deployer (a multisig in production). Can grant/revoke attestor roles.
-- **Attestors:** Addresses authorized to call `attest` and `batchAttest`. In production, this is the AgentProof attestation service's hot wallet. The hot wallet holds minimal ETH for gas and has no other permissions.
+- **Attestors:** Addresses authorized to call `attest` and `batchAttest`. In production, this is the BlockThrough attestation service's hot wallet. The hot wallet holds minimal ETH for gas and has no other permissions.
 - **Readers:** Anyone. All `verify`, `getLatest`, and `getByPeriod` functions are public view.
 
 ---
@@ -556,7 +556,7 @@ The Merkle tree anchors individual trace evaluations to a single on-chain root. 
 Each leaf represents one trace (a sequence of LLM events sharing a `trace_id`). The leaf hash commits to the trace's aggregate metrics.
 
 ```python
-from agentproof.pipeline.hasher import hash_content
+from blockthrough.pipeline.hasher import hash_content
 
 
 def compute_trace_leaf(
@@ -683,7 +683,7 @@ def verify_proof(
 ### Data Flow: DB to L2 Transaction
 
 ```
-                    AgentProof DB (TimescaleDB)
+                    BlockThrough DB (TimescaleDB)
                             |
                     [1] Daily batch job
                             |
@@ -729,7 +729,7 @@ def verify_proof(
 
 A third party wanting to verify a claim about a specific trace:
 
-1. Request the trace evaluation data and Merkle proof from the AgentProof API.
+1. Request the trace evaluation data and Merkle proof from the BlockThrough API.
 2. Re-compute the leaf hash from the evaluation data.
 3. Verify the Merkle proof against the on-chain `merkleRoot` (call `getLatest` or `verify` on the contract).
 4. Optionally verify the chain linkage by checking `prevHash` against the prior attestation.
@@ -817,7 +817,7 @@ class AttestationProvider(abc.ABC):
 from web3 import AsyncWeb3
 from web3.contract import AsyncContract
 
-from agentproof.attestation.provider import (
+from blockthrough.attestation.provider import (
     AttestationProvider,
     AttestationRecord,
     SubmitResult,
@@ -962,7 +962,7 @@ class EVMProvider(AttestationProvider):
 from collections import defaultdict
 from typing import Sequence
 
-from agentproof.attestation.provider import (
+from blockthrough.attestation.provider import (
     AttestationProvider,
     AttestationRecord,
     SubmitResult,
@@ -1031,9 +1031,9 @@ class LocalProvider(AttestationProvider):
 ### Configuration
 
 ```python
-# Additions to src/agentproof/config.py
+# Additions to src/blockthrough/config.py
 
-class AgentProofConfig(BaseSettings):
+class BlockThroughConfig(BaseSettings):
     # ... existing fields ...
 
     # Attestation (Phase 2)
@@ -1050,7 +1050,7 @@ class AgentProofConfig(BaseSettings):
 ### Provider Factory
 
 ```python
-from agentproof.config import get_config
+from blockthrough.config import get_config
 
 
 def create_attestation_provider() -> AttestationProvider:
@@ -1058,11 +1058,11 @@ def create_attestation_provider() -> AttestationProvider:
     config = get_config()
 
     if config.attestation_provider == "local":
-        from agentproof.attestation.local import LocalProvider
+        from blockthrough.attestation.local import LocalProvider
         return LocalProvider()
 
     if config.attestation_provider == "evm":
-        from agentproof.attestation.evm import EVMProvider
+        from blockthrough.attestation.evm import EVMProvider
         return EVMProvider(
             rpc_url=config.attestation_rpc_url,
             contract_address=config.attestation_contract_address,
@@ -1135,7 +1135,7 @@ The off-chain storage cost is dominated by the `trace_evaluations` table. For an
 ### Directory Structure (New)
 
 ```
-src/agentproof/
+src/blockthrough/
   attestation/
     __init__.py
     provider.py        # AttestationProvider ABC, AttestationRecord, SubmitResult
@@ -1149,9 +1149,9 @@ src/agentproof/
 
 contracts/
   src/
-    AgentProofAttestation.sol
+    BlockThroughAttestation.sol
   test/
-    AgentProofAttestation.t.sol
+    BlockThroughAttestation.t.sol
   script/
     Deploy.s.sol
   foundry.toml
@@ -1286,22 +1286,22 @@ All paths are absolute, relative to the repository root at `/Users/hju/Documents
 
 | Component | Path |
 |-----------|------|
-| Existing content hasher | `/Users/hju/Documents/BlockWorks/src/agentproof/pipeline/hasher.py` |
-| Existing core types | `/Users/hju/Documents/BlockWorks/src/agentproof/types.py` |
-| Existing benchmarking types | `/Users/hju/Documents/BlockWorks/src/agentproof/benchmarking/types.py` |
-| Existing waste types | `/Users/hju/Documents/BlockWorks/src/agentproof/waste/types.py` |
-| Existing API schemas | `/Users/hju/Documents/BlockWorks/src/agentproof/api/schemas.py` |
-| Existing config | `/Users/hju/Documents/BlockWorks/src/agentproof/config.py` |
-| New: attestation provider ABC | `/Users/hju/Documents/BlockWorks/src/agentproof/attestation/provider.py` |
-| New: local provider | `/Users/hju/Documents/BlockWorks/src/agentproof/attestation/local.py` |
-| New: EVM provider | `/Users/hju/Documents/BlockWorks/src/agentproof/attestation/evm.py` |
-| New: provider factory | `/Users/hju/Documents/BlockWorks/src/agentproof/attestation/factory.py` |
-| New: Merkle tree library | `/Users/hju/Documents/BlockWorks/src/agentproof/attestation/merkle.py` |
-| New: attestation hash functions | `/Users/hju/Documents/BlockWorks/src/agentproof/attestation/hasher.py` |
-| New: attestation service | `/Users/hju/Documents/BlockWorks/src/agentproof/attestation/service.py` |
-| New: attestation Pydantic models | `/Users/hju/Documents/BlockWorks/src/agentproof/attestation/types.py` |
-| New: Solidity contract | `/Users/hju/Documents/BlockWorks/contracts/src/AgentProofAttestation.sol` |
-| New: Foundry tests | `/Users/hju/Documents/BlockWorks/contracts/test/AgentProofAttestation.t.sol` |
+| Existing content hasher | `/Users/hju/Documents/BlockWorks/src/blockthrough/pipeline/hasher.py` |
+| Existing core types | `/Users/hju/Documents/BlockWorks/src/blockthrough/types.py` |
+| Existing benchmarking types | `/Users/hju/Documents/BlockWorks/src/blockthrough/benchmarking/types.py` |
+| Existing waste types | `/Users/hju/Documents/BlockWorks/src/blockthrough/waste/types.py` |
+| Existing API schemas | `/Users/hju/Documents/BlockWorks/src/blockthrough/api/schemas.py` |
+| Existing config | `/Users/hju/Documents/BlockWorks/src/blockthrough/config.py` |
+| New: attestation provider ABC | `/Users/hju/Documents/BlockWorks/src/blockthrough/attestation/provider.py` |
+| New: local provider | `/Users/hju/Documents/BlockWorks/src/blockthrough/attestation/local.py` |
+| New: EVM provider | `/Users/hju/Documents/BlockWorks/src/blockthrough/attestation/evm.py` |
+| New: provider factory | `/Users/hju/Documents/BlockWorks/src/blockthrough/attestation/factory.py` |
+| New: Merkle tree library | `/Users/hju/Documents/BlockWorks/src/blockthrough/attestation/merkle.py` |
+| New: attestation hash functions | `/Users/hju/Documents/BlockWorks/src/blockthrough/attestation/hasher.py` |
+| New: attestation service | `/Users/hju/Documents/BlockWorks/src/blockthrough/attestation/service.py` |
+| New: attestation Pydantic models | `/Users/hju/Documents/BlockWorks/src/blockthrough/attestation/types.py` |
+| New: Solidity contract | `/Users/hju/Documents/BlockWorks/contracts/src/BlockThroughAttestation.sol` |
+| New: Foundry tests | `/Users/hju/Documents/BlockWorks/contracts/test/BlockThroughAttestation.t.sol` |
 | New: deploy script | `/Users/hju/Documents/BlockWorks/contracts/script/Deploy.s.sol` |
 | New: Foundry config | `/Users/hju/Documents/BlockWorks/contracts/foundry.toml` |
 

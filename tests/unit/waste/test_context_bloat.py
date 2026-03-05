@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.waste.detectors.context_bloat import detect_context_bloat
-from agentproof.waste.types import WasteCategory, WasteSeverity
+from blockthrough.waste.detectors.context_bloat import detect_context_bloat
+from blockthrough.waste.types import WasteCategory, WasteSeverity
 
 
 def _event(

@@ -17,7 +17,7 @@ import asyncpg
 import pytest
 from testcontainers.postgres import PostgresContainer
 
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "src" / "agentproof" / "pipeline" / "schema.sql"
+SCHEMA_PATH = Path(__file__).resolve().parents[2] / "src" / "blockthrough" / "pipeline" / "schema.sql"
 
 TIMESCALEDB_IMAGE = "timescale/timescaledb:2.17.2-pg16"
 
@@ -155,10 +155,10 @@ def make_callback(
     batch_size: int = 10,
     flush_interval_ms: int = 50,
 ):
-    """Create an AgentProofCallback with test-friendly defaults."""
-    from agentproof.pipeline.callback import AgentProofCallback
+    """Create an BlockThroughCallback with test-friendly defaults."""
+    from blockthrough.pipeline.callback import BlockThroughCallback
 
-    return AgentProofCallback(
+    return BlockThroughCallback(
         db_url=db_url,
         org_id=org_id,
         enable_classification=enable_classification,

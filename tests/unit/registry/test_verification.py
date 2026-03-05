@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.registry.store import ListingNotFoundError, RegistryStore
-from agentproof.registry.types import AgentListing, ListingCategory
-from agentproof.registry.verification import get_verification_status, verify_listing
-from agentproof.trust.registry import TrustRegistry
-from agentproof.trust.types import TrustDimension
+from blockthrough.registry.store import ListingNotFoundError, RegistryStore
+from blockthrough.registry.types import AgentListing, ListingCategory
+from blockthrough.registry.verification import get_verification_status, verify_listing
+from blockthrough.trust.registry import TrustRegistry
+from blockthrough.trust.types import TrustDimension
 
 
 def _make_listing(**overrides) -> AgentListing:

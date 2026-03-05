@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.config import get_config
-from agentproof.enterprise.tenants import (
+from blockthrough.config import get_config
+from blockthrough.enterprise.tenants import (
     create_tenant,
     deactivate_tenant,
     get_plan_limit,
@@ -14,7 +14,7 @@ from agentproof.enterprise.tenants import (
     reset_store,
     update_tenant,
 )
-from agentproof.enterprise.types import Plan
+from blockthrough.enterprise.types import Plan
 
 
 class TestTenantCreate:

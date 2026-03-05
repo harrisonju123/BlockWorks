@@ -10,8 +10,8 @@ import time
 
 import pytest
 
-from agentproof.channels.manager import ChannelError, ChannelManager
-from agentproof.channels.types import ChannelConfig
+from blockthrough.channels.manager import ChannelError, ChannelManager
+from blockthrough.channels.types import ChannelConfig
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ class TestReceivePayment:
 
         # For this test, we verify the signature is valid by directly
         # calling verify_signature
-        from agentproof.channels.signing import verify_signature
+        from blockthrough.channels.signing import verify_signature
 
         assert verify_signature(
             state.channel_id,
@@ -192,7 +192,7 @@ class TestReceivePayment:
         update = mgr.create_payment(state.channel_id, 0.3)
 
         # Tamper with the nonce
-        from agentproof.channels.types import PaymentUpdate
+        from blockthrough.channels.types import PaymentUpdate
 
         bad_update = PaymentUpdate(
             channel_id=state.channel_id,
@@ -208,8 +208,8 @@ class TestReceivePayment:
         mgr = _make_manager()
         state = mgr.open_channel(SENDER, RECEIVER, 1.0, sender_key=SENDER_KEY)
 
-        from agentproof.channels.signing import sign_payment
-        from agentproof.channels.types import PaymentUpdate
+        from blockthrough.channels.signing import sign_payment
+        from blockthrough.channels.types import PaymentUpdate
 
         # Forge a payment claiming more than deposit
         sig = sign_payment(state.channel_id, 5.0, 1, SENDER_KEY)
@@ -227,7 +227,7 @@ class TestReceivePayment:
         mgr = _make_manager()
         state = mgr.open_channel(SENDER, RECEIVER, 1.0, sender_key=SENDER_KEY)
 
-        from agentproof.channels.types import PaymentUpdate
+        from blockthrough.channels.types import PaymentUpdate
 
         bad_update = PaymentUpdate(
             channel_id=state.channel_id,

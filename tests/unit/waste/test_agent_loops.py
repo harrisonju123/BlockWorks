@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from agentproof.waste.detectors.agent_loops import detect_agent_loops
-from agentproof.waste.types import WasteCategory, WasteSeverity
+from blockthrough.waste.detectors.agent_loops import detect_agent_loops
+from blockthrough.waste.types import WasteCategory, WasteSeverity
 
 
 def _pattern_row(

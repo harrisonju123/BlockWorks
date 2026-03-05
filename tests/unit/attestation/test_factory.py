@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.attestation.evm_provider import EVMProvider
-from agentproof.attestation.factory import create_provider
-from agentproof.attestation.local_provider import LocalProvider
-from agentproof.config import get_config
+from blockthrough.attestation.evm_provider import EVMProvider
+from blockthrough.attestation.factory import create_provider
+from blockthrough.attestation.local_provider import LocalProvider
+from blockthrough.config import get_config
 
 
 class TestCreateProvider:

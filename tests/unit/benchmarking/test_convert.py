@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agentproof.benchmarking.convert import (
+from blockthrough.benchmarking.convert import (
     convert_anthropic_to_openai,
     is_anthropic_format,
 )

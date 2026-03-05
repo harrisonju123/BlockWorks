@@ -6,7 +6,7 @@ and markdown output formatting.
 
 from __future__ import annotations
 
-from agentproof.sdk.github_action import (
+from blockthrough.sdk.github_action import (
     CostEstimate,
     _parse_diff,
     estimate_pr_cost,
@@ -153,7 +153,7 @@ class TestCostEstimateWithContext:
     def test_no_current_stats(self) -> None:
         estimate = estimate_pr_cost(DIFF_OPENAI_CALL)
         # Should still produce a valid summary without percentage context
-        assert "AgentProof" in estimate.summary
+        assert "Blockthrough" in estimate.summary
 
 
 class TestFormatGithubComment:
@@ -173,6 +173,6 @@ class TestFormatGithubComment:
         estimate = estimate_pr_cost(DIFF_MULTIPLE_CALLS)
         comment = format_github_comment(estimate)
         # Should have markdown headers
-        assert "## AgentProof" in comment
+        assert "## Blockthrough" in comment
         # Should have a table
         assert "|" in comment

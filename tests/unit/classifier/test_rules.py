@@ -1,8 +1,8 @@
 """Tests for the rules-based classifier."""
 
-from agentproof.classifier.rules import classify, extract_keywords
-from agentproof.classifier.taxonomy import ClassifierInput
-from agentproof.types import TaskType
+from blockthrough.classifier.rules import classify, extract_keywords
+from blockthrough.classifier.taxonomy import ClassifierInput
+from blockthrough.types import TaskType
 
 
 def _make_input(**overrides) -> ClassifierInput:

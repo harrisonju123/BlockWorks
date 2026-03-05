@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.validators.consensus import ConsensusEngine
-from agentproof.validators.types import ValidationSubmission
+from blockthrough.validators.consensus import ConsensusEngine
+from blockthrough.validators.types import ValidationSubmission
 
 
 # ---------------------------------------------------------------------------

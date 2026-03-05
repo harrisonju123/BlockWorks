@@ -11,14 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentproof.alerts.notify import (
+from blockthrough.alerts.notify import (
     SEVERITY_EMOJI,
     dispatch_alert,
     format_email_body,
     format_slack_blocks,
     send_slack_webhook,
 )
-from agentproof.alerts.types import (
+from blockthrough.alerts.types import (
     AlertChannel,
     AlertEvent,
     AlertRule,
@@ -154,7 +154,7 @@ class TestSendSlackWebhook:
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
 
-        with patch("agentproof.alerts.notify.httpx.AsyncClient") as mock_client_cls:
+        with patch("blockthrough.alerts.notify.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -179,7 +179,7 @@ class TestSendSlackWebhook:
     async def test_http_error_returns_false(self) -> None:
         import httpx as _httpx
 
-        with patch("agentproof.alerts.notify.httpx.AsyncClient") as mock_client_cls:
+        with patch("blockthrough.alerts.notify.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(
                 side_effect=_httpx.HTTPStatusError(
@@ -201,7 +201,7 @@ class TestDispatchAlert:
         rule = _rule(channel=AlertChannel.SLACK)
         event = _event()
 
-        with patch("agentproof.alerts.notify.send_slack_webhook", new_callable=AsyncMock) as mock_send:
+        with patch("blockthrough.alerts.notify.send_slack_webhook", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = True
             await dispatch_alert(rule, event)
             mock_send.assert_called_once()
@@ -217,7 +217,7 @@ class TestDispatchAlert:
         )
         event = _event()
 
-        with patch("agentproof.alerts.notify.send_email", new_callable=AsyncMock) as mock_send:
+        with patch("blockthrough.alerts.notify.send_email", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = True
             await dispatch_alert(rule, event, smtp_host="smtp.test.com")
             mock_send.assert_called_once()
@@ -238,8 +238,8 @@ class TestDispatchAlert:
         event = _event()
 
         with (
-            patch("agentproof.alerts.notify.send_slack_webhook", new_callable=AsyncMock) as mock_slack,
-            patch("agentproof.alerts.notify.send_email", new_callable=AsyncMock) as mock_email,
+            patch("blockthrough.alerts.notify.send_slack_webhook", new_callable=AsyncMock) as mock_slack,
+            patch("blockthrough.alerts.notify.send_email", new_callable=AsyncMock) as mock_email,
         ):
             mock_slack.return_value = True
             mock_email.return_value = True

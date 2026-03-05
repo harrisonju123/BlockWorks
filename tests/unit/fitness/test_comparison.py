@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.fitness.comparison import ComparisonError, compare_models
-from agentproof.fitness.types import LeaderboardEntry
+from blockthrough.fitness.comparison import ComparisonError, compare_models
+from blockthrough.fitness.types import LeaderboardEntry
 
 
 # ---------------------------------------------------------------------------

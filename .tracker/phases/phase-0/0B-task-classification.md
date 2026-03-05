@@ -25,7 +25,7 @@ Classify every LLM call by task type so the system can evaluate whether the righ
 - Confidence separation: correct predictions avg 0.538, incorrect avg 0.255
 - At confidence threshold >0.5, accuracy reaches 100%
 - Decision: rules-based is sufficient for Phase 0. DistilBERT evaluation deferred — rules already exceed the 75% target
-- `agentproof evaluate` CLI command runs the eval harness
+- `blockthrough evaluate` CLI command runs the eval harness
 
 ## Blockers
 

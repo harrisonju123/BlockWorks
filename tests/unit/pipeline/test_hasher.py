@@ -1,6 +1,6 @@
 """Tests for canonical content hashing."""
 
-from agentproof.pipeline.hasher import hash_content
+from blockthrough.pipeline.hasher import hash_content
 
 
 class TestHashContent:

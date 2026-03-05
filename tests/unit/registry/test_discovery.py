@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from agentproof.registry.discovery import (
+from blockthrough.registry.discovery import (
     find_best_agent,
     find_compatible_mcp_servers,
     get_recommendations,
 )
-from agentproof.registry.store import RegistryStore
-from agentproof.registry.types import (
+from blockthrough.registry.store import RegistryStore
+from blockthrough.registry.types import (
     AgentListing,
     ListingCategory,
     MCPServerListing,

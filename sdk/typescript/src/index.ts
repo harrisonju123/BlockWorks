@@ -1,19 +1,19 @@
 /**
- * AgentProof TypeScript SDK
+ * BlockThrough TypeScript SDK
  *
- * Provides a typed client for the AgentProof REST API. Uses the
+ * Provides a typed client for the BlockThrough REST API. Uses the
  * native fetch API (Node 18+ / browsers) with no external dependencies.
  *
  * Usage:
- *   import { AgentProofClient } from "@agentproof/sdk";
+ *   import { BlockThroughClient } from "@blockthrough/sdk";
  *
- *   const client = new AgentProofClient({ apiUrl: "http://localhost:8100" });
+ *   const client = new BlockThroughClient({ apiUrl: "http://localhost:8100" });
  *   await client.track({ model: "gpt-4o", messages: [...], ... });
  *   const stats = await client.getStats();
  */
 
 import type {
-  AgentProofConfig,
+  BlockThroughConfig,
   FitnessMatrixResponse,
   SummaryResponse,
   TrackEventRequest,
@@ -23,23 +23,23 @@ import type {
 
 export * from "./types.js";
 
-export class AgentProofError extends Error {
+export class BlockThroughError extends Error {
   constructor(
     public readonly statusCode: number,
     public readonly detail: string,
   ) {
-    super(`AgentProof API error ${statusCode}: ${detail}`);
-    this.name = "AgentProofError";
+    super(`BlockThrough API error ${statusCode}: ${detail}`);
+    this.name = "BlockThroughError";
   }
 }
 
-export class AgentProofClient {
+export class BlockThroughClient {
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
 
-  constructor(config: AgentProofConfig) {
+  constructor(config: BlockThroughConfig) {
     this.baseUrl = config.apiUrl.replace(/\/$/, "");
     this.timeoutMs = config.timeoutMs ?? 30_000;
     this.maxRetries = config.maxRetries ?? 3;
@@ -101,7 +101,7 @@ export class AgentProofClient {
           } catch {
             // Use raw text as detail
           }
-          throw new AgentProofError(response.status, detail);
+          throw new BlockThroughError(response.status, detail);
         }
 
         return (await response.json()) as T;
@@ -110,7 +110,7 @@ export class AgentProofClient {
 
         // Don't retry client errors (4xx) or if we've exhausted retries
         if (
-          error instanceof AgentProofError &&
+          error instanceof BlockThroughError &&
           error.statusCode >= 400 &&
           error.statusCode < 500
         ) {

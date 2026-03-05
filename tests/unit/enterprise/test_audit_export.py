@@ -6,18 +6,18 @@ import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from agentproof.compliance.builder import build_audit_record_from_row
-from agentproof.compliance.report import generate_audit_report
-from agentproof.compliance.types import AuditReport, ComplianceFramework
-from agentproof.config import get_config
-from agentproof.enterprise.audit_export import (
+from blockthrough.compliance.builder import build_audit_record_from_row
+from blockthrough.compliance.report import generate_audit_report
+from blockthrough.compliance.types import AuditReport, ComplianceFramework
+from blockthrough.config import get_config
+from blockthrough.enterprise.audit_export import (
     export_tenant_audit,
     get_export_schedules,
     reset_store,
     schedule_audit_export,
 )
-from agentproof.enterprise.tenants import create_tenant
-from agentproof.enterprise.tenants import reset_store as reset_tenant_store
+from blockthrough.enterprise.tenants import create_tenant
+from blockthrough.enterprise.tenants import reset_store as reset_tenant_store
 
 
 def _make_row(**overrides) -> dict:

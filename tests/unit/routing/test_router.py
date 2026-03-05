@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.routing.router import FitnessCache, resolve
-from agentproof.routing.types import (
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.routing.router import FitnessCache, resolve
+from blockthrough.routing.types import (
     QUALITY_FLOOR,
     RoutingPolicy,
     RoutingRule,
@@ -477,6 +477,99 @@ class TestToolUseFiltering:
 
         assert decision.selected_model == "claude-haiku-4-5-20251001"
         assert "fallback" in decision.reason
+
+
+class TestAllowedModelsFiltering:
+
+    def test_allowed_models_excludes_non_matching_candidates(self) -> None:
+        """Only models in allowed_models are considered as candidates."""
+        entries = [
+            _make_entry("claude-sonnet-4-20250514", "classification", avg_quality=0.93, avg_cost=0.003),
+            _make_entry("gpt-4o", "classification", avg_quality=0.92, avg_cost=0.0025),
+            _make_entry("gpt-4o-mini", "classification", avg_quality=0.91, avg_cost=0.0004),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+                    min_quality=0.9,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+        anthropic_only = {"claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"}
+
+        decision = resolve("classification", "claude-sonnet-4-20250514", cache, policy, allowed_models=anthropic_only)
+
+        # gpt-4o and gpt-4o-mini excluded; sonnet is the only qualifying candidate
+        assert decision.selected_model == "claude-sonnet-4-20250514"
+
+    def test_allowed_models_fallback_not_in_set_returns_requested(self) -> None:
+        """When fallback isn't in allowed_models, fall through to requested model."""
+        entries = [
+            _make_entry("gpt-4o", "classification", avg_quality=0.92, avg_cost=0.0025),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+                    min_quality=0.9,
+                    fallback="gpt-4o-mini",  # not in allowed set
+                ),
+            ]
+        )
+        anthropic_only = {"claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"}
+
+        decision = resolve("classification", "claude-sonnet-4-20250514", cache, policy, allowed_models=anthropic_only)
+
+        # gpt-4o filtered out, gpt-4o-mini fallback also not allowed -> passthrough
+        assert decision.selected_model == "claude-sonnet-4-20250514"
+        assert decision.was_overridden is False
+
+    def test_allowed_models_empty_cache_fallback_not_allowed(self) -> None:
+        """Empty fitness matrix + disallowed fallback -> passthrough to requested model."""
+        cache = _make_cache([])
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+                    fallback="gpt-4o-mini",
+                ),
+            ]
+        )
+        anthropic_only = {"claude-sonnet-4-20250514"}
+
+        decision = resolve("classification", "claude-sonnet-4-20250514", cache, policy, allowed_models=anthropic_only)
+
+        assert decision.selected_model == "claude-sonnet-4-20250514"
+        assert decision.was_overridden is False
+
+    def test_no_allowed_models_constraint_keeps_all_candidates(self) -> None:
+        """When allowed_models is None, all candidates remain (backward compat)."""
+        entries = [
+            _make_entry("gpt-4o-mini", "classification", avg_quality=0.91, avg_cost=0.0004),
+            _make_entry("claude-sonnet-4-20250514", "classification", avg_quality=0.93, avg_cost=0.003),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+                    min_quality=0.9,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+
+        decision = resolve("classification", "claude-sonnet-4-20250514", cache, policy, allowed_models=None)
+
+        assert decision.selected_model == "gpt-4o-mini"
 
 
 class TestFitnessCache:

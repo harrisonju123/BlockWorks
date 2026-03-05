@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from agentproof.waste.report import format_plain_text, format_slack_blocks
-from agentproof.waste.types import (
+from blockthrough.waste.report import format_plain_text, format_slack_blocks
+from blockthrough.waste.types import (
     WasteCategory,
     WasteItem,
     WasteReport,
@@ -51,7 +51,7 @@ class TestPlainTextFormatting:
         report = _report()
         text = format_plain_text(report)
         assert "No waste detected" in text
-        assert "AgentProof" in text
+        assert "Blockthrough" in text
 
     def test_includes_waste_score(self) -> None:
         report = _report(items=[_item()], waste_score=0.3)

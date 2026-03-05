@@ -5,18 +5,18 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from agentproof.utils import utcnow
+from blockthrough.utils import utcnow
 
 import pytest
 
-from agentproof.attestation.builder import ZERO_HASH
-from agentproof.attestation.hashing import compute_chain_hash, hash_org_id
-from agentproof.attestation.scheduler import _attest_org, _run_cycle
+from blockthrough.attestation.builder import ZERO_HASH
+from blockthrough.attestation.hashing import compute_chain_hash, hash_org_id
+from blockthrough.attestation.scheduler import _attest_org, _run_cycle
 
 from .conftest import PERIOD_END, make_record
 
 # Patch target for the lazy import inside scheduler functions
-_DEPS = "agentproof.api.deps.get_async_session"
+_DEPS = "blockthrough.api.deps.get_async_session"
 
 
 def _mock_session_cm(session):
@@ -39,7 +39,7 @@ class TestAttestOrg:
         session = AsyncMock()
 
         with patch(_DEPS, return_value=_mock_session_cm(session)), patch(
-            "agentproof.attestation.scheduler.get_earliest_event_time",
+            "blockthrough.attestation.scheduler.get_earliest_event_time",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -60,7 +60,7 @@ class TestAttestOrg:
         session = AsyncMock()
 
         with patch(_DEPS, return_value=_mock_session_cm(session)), patch(
-            "agentproof.attestation.scheduler.get_earliest_event_time",
+            "blockthrough.attestation.scheduler.get_earliest_event_time",
             new_callable=AsyncMock,
             return_value=earliest,
         ):
@@ -87,11 +87,11 @@ class TestAttestOrg:
         )
 
         with patch(_DEPS, return_value=_mock_session_cm(session)), patch(
-            "agentproof.attestation.scheduler.get_earliest_event_time",
+            "blockthrough.attestation.scheduler.get_earliest_event_time",
             new_callable=AsyncMock,
             return_value=earliest,
         ), patch(
-            "agentproof.attestation.scheduler.build_attestation",
+            "blockthrough.attestation.scheduler.build_attestation",
             new_callable=AsyncMock,
             return_value=built_record,
         ) as mock_build:
@@ -133,7 +133,7 @@ class TestAttestOrg:
         )
 
         with patch(_DEPS, return_value=_mock_session_cm(session)), patch(
-            "agentproof.attestation.scheduler.build_attestation",
+            "blockthrough.attestation.scheduler.build_attestation",
             new_callable=AsyncMock,
             return_value=chained_record,
         ) as mock_build:
@@ -159,14 +159,14 @@ class TestRunCycle:
         mock_config.org_id = "config-org"
 
         with patch(_DEPS, return_value=_mock_session_cm(session)), patch(
-            "agentproof.attestation.scheduler.get_distinct_org_ids",
+            "blockthrough.attestation.scheduler.get_distinct_org_ids",
             new_callable=AsyncMock,
             return_value=["org-a", "org-b"],
         ), patch(
-            "agentproof.attestation.scheduler.get_config",
+            "blockthrough.attestation.scheduler.get_config",
             return_value=mock_config,
         ), patch(
-            "agentproof.attestation.scheduler._attest_org",
+            "blockthrough.attestation.scheduler._attest_org",
             new_callable=AsyncMock,
             return_value="local-tx-00000001",
         ) as mock_attest:
@@ -187,14 +187,14 @@ class TestRunCycle:
         mock_config.org_id = "org-a"  # same as a DB org
 
         with patch(_DEPS, return_value=_mock_session_cm(session)), patch(
-            "agentproof.attestation.scheduler.get_distinct_org_ids",
+            "blockthrough.attestation.scheduler.get_distinct_org_ids",
             new_callable=AsyncMock,
             return_value=["org-a", "org-b"],
         ), patch(
-            "agentproof.attestation.scheduler.get_config",
+            "blockthrough.attestation.scheduler.get_config",
             return_value=mock_config,
         ), patch(
-            "agentproof.attestation.scheduler._attest_org",
+            "blockthrough.attestation.scheduler._attest_org",
             new_callable=AsyncMock,
             return_value=None,
         ) as mock_attest:
@@ -224,14 +224,14 @@ class TestRunCycle:
             return "local-tx-00000001"
 
         with patch(_DEPS, return_value=_mock_session_cm(session)), patch(
-            "agentproof.attestation.scheduler.get_distinct_org_ids",
+            "blockthrough.attestation.scheduler.get_distinct_org_ids",
             new_callable=AsyncMock,
             return_value=["org-bad", "org-good"],
         ), patch(
-            "agentproof.attestation.scheduler.get_config",
+            "blockthrough.attestation.scheduler.get_config",
             return_value=mock_config,
         ), patch(
-            "agentproof.attestation.scheduler._attest_org",
+            "blockthrough.attestation.scheduler._attest_org",
             new_callable=AsyncMock,
             side_effect=_side_effect,
         ):

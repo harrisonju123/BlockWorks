@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.fitness.builder import build_leaderboard
-from agentproof.fitness.types import FitnessIndexConfig
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.fitness.builder import build_leaderboard
+from blockthrough.fitness.types import FitnessIndexConfig
 
 
 # ---------------------------------------------------------------------------

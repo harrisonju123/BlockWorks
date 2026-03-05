@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.waste.analyzer import WasteAnalyzer
-from agentproof.waste.types import WasteCategory
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.waste.analyzer import WasteAnalyzer
+from blockthrough.waste.types import WasteCategory
 
 
 def _now() -> datetime:
@@ -27,11 +27,11 @@ class TestAnalyzerOrchestration:
         session = AsyncMock()
 
         with (
-            patch("agentproof.waste.analyzer.get_waste_analysis", return_value=[]),
-            patch("agentproof.waste.analyzer.get_fitness_matrix", return_value=[]),
-            patch("agentproof.waste.analyzer.get_duplicate_tool_calls", return_value=[]),
-            patch("agentproof.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
-            patch("agentproof.waste.analyzer.get_trace_tool_patterns", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_waste_analysis", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_fitness_matrix", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_duplicate_tool_calls", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_trace_tool_patterns", return_value=[]),
         ):
             analyzer = WasteAnalyzer()
             report = await analyzer.analyze(session, _an_hour_ago(), _now())
@@ -73,11 +73,11 @@ class TestAnalyzerOrchestration:
         ]
 
         with (
-            patch("agentproof.waste.analyzer.get_waste_analysis", return_value=usage_rows),
-            patch("agentproof.waste.analyzer.get_fitness_matrix", return_value=fitness),
-            patch("agentproof.waste.analyzer.get_duplicate_tool_calls", return_value=dup_tool_rows),
-            patch("agentproof.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
-            patch("agentproof.waste.analyzer.get_trace_tool_patterns", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_waste_analysis", return_value=usage_rows),
+            patch("blockthrough.waste.analyzer.get_fitness_matrix", return_value=fitness),
+            patch("blockthrough.waste.analyzer.get_duplicate_tool_calls", return_value=dup_tool_rows),
+            patch("blockthrough.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_trace_tool_patterns", return_value=[]),
         ):
             analyzer = WasteAnalyzer()
             report = await analyzer.analyze(session, _an_hour_ago(), _now())
@@ -112,11 +112,11 @@ class TestAnalyzerOrchestration:
         ]
 
         with (
-            patch("agentproof.waste.analyzer.get_waste_analysis", return_value=usage_rows),
-            patch("agentproof.waste.analyzer.get_fitness_matrix", return_value=fitness),
-            patch("agentproof.waste.analyzer.get_duplicate_tool_calls", return_value=[]),
-            patch("agentproof.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
-            patch("agentproof.waste.analyzer.get_trace_tool_patterns", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_waste_analysis", return_value=usage_rows),
+            patch("blockthrough.waste.analyzer.get_fitness_matrix", return_value=fitness),
+            patch("blockthrough.waste.analyzer.get_duplicate_tool_calls", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_trace_tool_patterns", return_value=[]),
         ):
             analyzer = WasteAnalyzer()
             report = await analyzer.analyze(session, _an_hour_ago(), _now())
@@ -138,11 +138,11 @@ class TestAnalyzerOrchestration:
         ]
 
         with (
-            patch("agentproof.waste.analyzer.get_waste_analysis", return_value=usage_rows),
-            patch("agentproof.waste.analyzer.get_fitness_matrix", return_value=fitness),
-            patch("agentproof.waste.analyzer.get_duplicate_tool_calls", return_value=[]),
-            patch("agentproof.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
-            patch("agentproof.waste.analyzer.get_trace_tool_patterns", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_waste_analysis", return_value=usage_rows),
+            patch("blockthrough.waste.analyzer.get_fitness_matrix", return_value=fitness),
+            patch("blockthrough.waste.analyzer.get_duplicate_tool_calls", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_trace_tool_patterns", return_value=[]),
         ):
             analyzer = WasteAnalyzer()
             report = await analyzer.analyze(session, _an_hour_ago(), _now())
@@ -155,11 +155,11 @@ class TestAnalyzerOrchestration:
         session = AsyncMock()
 
         with (
-            patch("agentproof.waste.analyzer.get_waste_analysis", return_value=[]),
-            patch("agentproof.waste.analyzer.get_fitness_matrix", return_value=[]),
-            patch("agentproof.waste.analyzer.get_duplicate_tool_calls", return_value=[]),
-            patch("agentproof.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
-            patch("agentproof.waste.analyzer.get_trace_tool_patterns", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_waste_analysis", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_fitness_matrix", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_duplicate_tool_calls", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_prompt_hash_duplicates", return_value=[]),
+            patch("blockthrough.waste.analyzer.get_trace_tool_patterns", return_value=[]),
         ):
             analyzer = WasteAnalyzer()
             report = await analyzer.analyze(session, _an_hour_ago(), _now())

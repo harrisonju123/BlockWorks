@@ -11,8 +11,8 @@ from collections import Counter
 
 import pytest
 
-from agentproof.validators.registry import ValidatorRegistry
-from agentproof.validators.tasks import TaskDistributionError, TaskDistributor
+from blockthrough.validators.registry import ValidatorRegistry
+from blockthrough.validators.tasks import TaskDistributionError, TaskDistributor
 
 
 # ---------------------------------------------------------------------------

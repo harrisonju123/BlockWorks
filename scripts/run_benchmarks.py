@@ -15,10 +15,10 @@ import asyncio
 import logging
 import sys
 
-from agentproof.benchmarking.eval_set import load_eval_set
-from agentproof.benchmarking.runner import BenchmarkRunner
-from agentproof.config import get_config
-from agentproof.types import TaskType
+from blockthrough.benchmarking.eval_set import load_eval_set
+from blockthrough.benchmarking.runner import BenchmarkRunner
+from blockthrough.config import get_config
+from blockthrough.types import TaskType
 
 # Default benchmark models — practical first run with common API keys
 DEFAULT_MODELS = [

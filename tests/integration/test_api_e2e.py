@@ -16,8 +16,8 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from agentproof.api.app import app
-from agentproof.api.deps import get_db
+from blockthrough.api.app import app
+from blockthrough.api.deps import get_db
 
 from .conftest import seed_events
 

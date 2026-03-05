@@ -3,8 +3,8 @@
 import uuid
 from datetime import datetime, timezone
 
-from agentproof.mcp.types import MCPCall, MCPExecutionEdge, MCPServerStats
-from agentproof.types import EventStatus
+from blockthrough.mcp.types import MCPCall, MCPExecutionEdge, MCPServerStats
+from blockthrough.types import EventStatus
 
 
 class TestMCPCall:

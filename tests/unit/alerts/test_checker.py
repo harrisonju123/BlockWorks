@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.alerts.checker import AlertChecker
-from agentproof.alerts.types import (
+from blockthrough.alerts.checker import AlertChecker
+from blockthrough.alerts.types import (
     AlertChannel,
     AlertEvent,
     AlertRule,

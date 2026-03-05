@@ -1,6 +1,6 @@
 """Tests for trace context propagation and framework detection."""
 
-from agentproof.pipeline.context import detect_agent_framework, extract_trace_context
+from blockthrough.pipeline.context import detect_agent_framework, extract_trace_context
 
 
 class TestExtractTraceContext:

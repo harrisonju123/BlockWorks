@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from agentproof.interop.types import (
+from blockthrough.interop.types import (
     AgentCapability,
     DisputeRecord,
     DisputeStatus,

@@ -1,11 +1,11 @@
 # OpenCode Integration
 
-Route OpenCode through AgentProof's LiteLLM proxy to capture every LLM call for observability, cost tracking, and task classification.
+Route OpenCode through BlockThrough's LiteLLM proxy to capture every LLM call for observability, cost tracking, and task classification.
 
 ## Prerequisites
 
 - Docker running locally
-- AgentProof stack up: `docker compose up -d`
+- BlockThrough stack up: `docker compose up -d`
 - Your LLM provider API key(s) set in `.env` (Anthropic, OpenAI, etc.)
 
 Verify the stack is healthy:
@@ -75,7 +75,7 @@ After running an OpenCode session through the proxy:
 curl -s http://localhost:8100/api/v1/events | jq '.count'
 
 # CLI summary
-agentproof stats
+blockthrough stats
 
 # Dashboard
 open http://localhost:8081
@@ -140,7 +140,7 @@ curl -s http://localhost:4000/v1/models -H "Authorization: Bearer sk-local-dev-k
 
 1. Confirm the API: `curl http://localhost:8100/health`
 2. Confirm the request actually went through LiteLLM (check its logs): `docker compose logs litellm --tail=20`
-3. Check for callback errors: `docker compose logs litellm | grep -i "callback\|agentproof"`
+3. Check for callback errors: `docker compose logs litellm | grep -i "callback\|blockthrough"`
 
 **OpenCode using wrong base URL**
 

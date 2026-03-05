@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.db.queries import get_fitness_matrix
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.db.queries import get_fitness_matrix
 
 
 def _mock_row(**kwargs) -> MagicMock:

@@ -11,14 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentproof.benchmarking.mirror import (
+from blockthrough.benchmarking.mirror import (
     BenchmarkWorker,
     _replay_prompt,
     run_benchmark_for_event,
     should_sample,
 )
-from agentproof.benchmarking.types import BenchmarkConfig
-from agentproof.types import EventStatus, LLMEvent, TaskType
+from blockthrough.benchmarking.types import BenchmarkConfig
+from blockthrough.types import EventStatus, LLMEvent, TaskType
 
 
 def _make_event(
@@ -139,8 +139,8 @@ class TestRunBenchmarkForEvent:
         mock_judge_response.choices = [MagicMock()]
         mock_judge_response.choices[0].message.content = '{"correctness": 0.85, "style": 0.9, "completeness": 0.8}'
 
-        with patch("agentproof.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_replay, \
-             patch("agentproof.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_judge:
+        with patch("blockthrough.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_replay, \
+             patch("blockthrough.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_judge:
             mock_replay.return_value = mock_replay_response
             mock_judge.return_value = mock_judge_response
 
@@ -175,8 +175,8 @@ class TestRunBenchmarkForEvent:
         mock_judge.choices = [MagicMock()]
         mock_judge.choices[0].message.content = '{"correctness": 0.9, "style": 0.8, "completeness": 0.7}'
 
-        with patch("agentproof.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_r, \
-             patch("agentproof.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_j:
+        with patch("blockthrough.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_r, \
+             patch("blockthrough.benchmarking.judge.litellm.acompletion", new_callable=AsyncMock) as mock_j:
             mock_r.return_value = mock_replay
             mock_j.return_value = mock_judge
 
@@ -270,7 +270,7 @@ class TestReplayPromptConversion:
         mock_response.choices[0].message.content = "hi"
         mock_response._hidden_params = {"response_cost": 0.001}
 
-        with patch("agentproof.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_acomp:
+        with patch("blockthrough.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_acomp:
             mock_acomp.return_value = mock_response
             await _replay_prompt(anthropic_messages, "test-model", system_prompt=system_prompt)
 
@@ -292,7 +292,7 @@ class TestReplayPromptConversion:
         mock_response.choices[0].message.content = "hello"
         mock_response._hidden_params = {"response_cost": 0.001}
 
-        with patch("agentproof.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_acomp:
+        with patch("blockthrough.benchmarking.mirror.litellm.acompletion", new_callable=AsyncMock) as mock_acomp:
             mock_acomp.return_value = mock_response
             await _replay_prompt(openai_messages, "test-model")
 

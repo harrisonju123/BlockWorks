@@ -6,8 +6,8 @@ like missing models and empty leaderboards.
 
 from __future__ import annotations
 
-from agentproof.fitness.types import LeaderboardEntry
-from agentproof.fitness.widget import generate_badge_data, generate_summary_widget
+from blockthrough.fitness.types import LeaderboardEntry
+from blockthrough.fitness.widget import generate_badge_data, generate_summary_widget
 
 
 # ---------------------------------------------------------------------------

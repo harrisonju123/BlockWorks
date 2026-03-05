@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from agentproof.registry.types import (
+from blockthrough.registry.types import (
     AgentListing,
     ListingCategory,
     ListingStatus,

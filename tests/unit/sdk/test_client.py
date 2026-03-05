@@ -1,4 +1,4 @@
-"""Tests for the AgentProof Python SDK client.
+"""Tests for the BlockThrough Python SDK client.
 
 All HTTP calls are mocked — no real API server needed. Tests cover
 the async SDK, sync wrapper, error handling, and response parsing.
@@ -12,10 +12,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from agentproof.sdk.client import AgentProofClient, AgentProofError, AgentProofSDK
+from blockthrough.sdk.client import BlockThroughClient, BlockThroughError, BlockThroughSDK
 
 
-class TestAgentProofSDKTrack:
+class TestBlockThroughSDKTrack:
     """Async SDK: track() sends correct payload and parses response."""
 
     @pytest.mark.asyncio
@@ -26,7 +26,7 @@ class TestAgentProofSDKTrack:
         )
 
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock_response):
-            async with AgentProofSDK(api_url="http://test:8100") as sdk:
+            async with BlockThroughSDK(api_url="http://test:8100") as sdk:
                 result = await sdk.track(
                     model="gpt-4o",
                     messages=[{"role": "user", "content": "hello"}],
@@ -48,7 +48,7 @@ class TestAgentProofSDKTrack:
         )
 
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock_response) as mock_req:
-            async with AgentProofSDK(api_url="http://test:8100") as sdk:
+            async with BlockThroughSDK(api_url="http://test:8100") as sdk:
                 await sdk.track(
                     model="claude-sonnet-4-20250514",
                     messages=[{"role": "user", "content": "test"}],
@@ -82,7 +82,7 @@ class TestAgentProofSDKTrack:
         )
 
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock_response) as mock_req:
-            async with AgentProofSDK(api_url="http://test:8100") as sdk:
+            async with BlockThroughSDK(api_url="http://test:8100") as sdk:
                 await sdk.track(
                     model="gpt-4o",
                     messages=[{"role": "user", "content": "sensitive data"}],
@@ -101,7 +101,7 @@ class TestAgentProofSDKTrack:
                 assert len(payload["completion_hash"]) == 64
 
 
-class TestAgentProofSDKGetStats:
+class TestBlockThroughSDKGetStats:
     """Async SDK: get_stats() correctly parses the summary response."""
 
     @pytest.mark.asyncio
@@ -129,7 +129,7 @@ class TestAgentProofSDKGetStats:
         mock_response = httpx.Response(200, json=mock_data)
 
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock_response):
-            async with AgentProofSDK(api_url="http://test:8100") as sdk:
+            async with BlockThroughSDK(api_url="http://test:8100") as sdk:
                 stats = await sdk.get_stats(period="24h")
 
                 assert stats.total_requests == 1500
@@ -139,7 +139,7 @@ class TestAgentProofSDKGetStats:
                 assert stats.groups[0].request_count == 1000
 
 
-class TestAgentProofSDKGetWasteScore:
+class TestBlockThroughSDKGetWasteScore:
 
     @pytest.mark.asyncio
     async def test_get_waste_score_success(self) -> None:
@@ -162,7 +162,7 @@ class TestAgentProofSDKGetWasteScore:
         mock_response = httpx.Response(200, json=mock_data)
 
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock_response):
-            async with AgentProofSDK(api_url="http://test:8100") as sdk:
+            async with BlockThroughSDK(api_url="http://test:8100") as sdk:
                 waste = await sdk.get_waste_score()
 
                 assert waste.waste_score == 0.35
@@ -171,7 +171,7 @@ class TestAgentProofSDKGetWasteScore:
                 assert waste.breakdown[0].task_type == "classification"
 
 
-class TestAgentProofSDKGetFitnessMatrix:
+class TestBlockThroughSDKGetFitnessMatrix:
 
     @pytest.mark.asyncio
     async def test_get_fitness_matrix_success(self) -> None:
@@ -190,7 +190,7 @@ class TestAgentProofSDKGetFitnessMatrix:
         mock_response = httpx.Response(200, json=mock_data)
 
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock_response):
-            async with AgentProofSDK(api_url="http://test:8100") as sdk:
+            async with BlockThroughSDK(api_url="http://test:8100") as sdk:
                 matrix = await sdk.get_fitness_matrix()
 
                 assert len(matrix.entries) == 1
@@ -198,7 +198,7 @@ class TestAgentProofSDKGetFitnessMatrix:
                 assert matrix.entries[0].quality_score == 0.85
 
 
-class TestAgentProofSDKErrorHandling:
+class TestBlockThroughSDKErrorHandling:
 
     @pytest.mark.asyncio
     async def test_api_error_raises(self) -> None:
@@ -208,8 +208,8 @@ class TestAgentProofSDKErrorHandling:
         )
 
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock_response):
-            async with AgentProofSDK(api_url="http://test:8100") as sdk:
-                with pytest.raises(AgentProofError) as exc_info:
+            async with BlockThroughSDK(api_url="http://test:8100") as sdk:
+                with pytest.raises(BlockThroughError) as exc_info:
                     await sdk.get_stats()
 
                 assert exc_info.value.status_code == 500
@@ -223,8 +223,8 @@ class TestAgentProofSDKErrorHandling:
         )
 
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock_response):
-            async with AgentProofSDK(api_url="http://test:8100") as sdk:
-                with pytest.raises(AgentProofError) as exc_info:
+            async with BlockThroughSDK(api_url="http://test:8100") as sdk:
+                with pytest.raises(BlockThroughError) as exc_info:
                     await sdk.track(
                         model="",
                         messages=[],
@@ -242,14 +242,14 @@ class TestAgentProofSDKErrorHandling:
         mock_response = httpx.Response(200, json={"total_requests": 0, "total_cost_usd": 0, "total_tokens": 0, "failure_rate": 0, "groups": []})
 
         with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock_response):
-            sdk = AgentProofSDK(api_url="http://test:8100", api_key="secret-key")
+            sdk = BlockThroughSDK(api_url="http://test:8100", api_key="secret-key")
             client = await sdk._ensure_client()
 
             assert client.headers["Authorization"] == "Bearer secret-key"
             await sdk.close()
 
 
-class TestAgentProofSyncClient:
+class TestBlockThroughSyncClient:
     """Sync wrapper: verifies it delegates to httpx.Client correctly."""
 
     def test_track_event_sync(self) -> None:
@@ -259,7 +259,7 @@ class TestAgentProofSyncClient:
         )
 
         with patch("httpx.Client.request", return_value=mock_response):
-            with AgentProofClient(api_url="http://test:8100") as client:
+            with BlockThroughClient(api_url="http://test:8100") as client:
                 result = client.track(
                     model="gpt-4o-mini",
                     messages=[{"role": "user", "content": "hi"}],
@@ -283,7 +283,7 @@ class TestAgentProofSyncClient:
         mock_response = httpx.Response(200, json=mock_data)
 
         with patch("httpx.Client.request", return_value=mock_response):
-            with AgentProofClient(api_url="http://test:8100") as client:
+            with BlockThroughClient(api_url="http://test:8100") as client:
                 stats = client.get_stats()
                 assert stats.total_requests == 100
                 assert stats.groups == []
@@ -297,7 +297,7 @@ class TestAgentProofSyncClient:
         mock_response = httpx.Response(200, json=mock_data)
 
         with patch("httpx.Client.request", return_value=mock_response):
-            with AgentProofClient(api_url="http://test:8100") as client:
+            with BlockThroughClient(api_url="http://test:8100") as client:
                 waste = client.get_waste_score()
                 assert waste.waste_score == 0.0
 
@@ -306,7 +306,7 @@ class TestAgentProofSyncClient:
         mock_response = httpx.Response(200, json=mock_data)
 
         with patch("httpx.Client.request", return_value=mock_response):
-            with AgentProofClient(api_url="http://test:8100") as client:
+            with BlockThroughClient(api_url="http://test:8100") as client:
                 matrix = client.get_fitness_matrix()
                 assert matrix.entries == []
 
@@ -317,14 +317,14 @@ class TestAgentProofSyncClient:
         )
 
         with patch("httpx.Client.request", return_value=mock_response):
-            with AgentProofClient(api_url="http://test:8100") as client:
-                with pytest.raises(AgentProofError) as exc_info:
+            with BlockThroughClient(api_url="http://test:8100") as client:
+                with pytest.raises(BlockThroughError) as exc_info:
                     client.get_stats()
 
                 assert exc_info.value.status_code == 404
 
     def test_context_manager_closes_client(self) -> None:
-        with AgentProofClient(api_url="http://test:8100") as client:
+        with BlockThroughClient(api_url="http://test:8100") as client:
             client._ensure_client()
             assert client._sync_client is not None
         # After exit, client should be closed

@@ -11,14 +11,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentproof.benchmarking.accountability import (
+from blockthrough.benchmarking.accountability import (
     AccountabilityReport,
     DriftItem,
     _compute_cost_impact,
     _hash_report_data,
     generate_report,
 )
-from agentproof.benchmarking.drift import DriftReport
+from blockthrough.benchmarking.drift import DriftReport
 
 
 class TestComputeCostImpact:

@@ -16,12 +16,12 @@ import sys
 
 import asyncpg
 
-from agentproof.config import get_config
-from agentproof.benchmarking.runner import EVAL_ORG_ID
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.models import MODEL_CATALOG, get_tier
-from agentproof.waste.suggest import _SIMPLE_TASKS as _SIMPLE_TASK_ENUMS
-from agentproof.waste.suggest import suggest_alternative
+from blockthrough.config import get_config
+from blockthrough.benchmarking.runner import EVAL_ORG_ID
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.models import MODEL_CATALOG, get_tier
+from blockthrough.waste.suggest import _SIMPLE_TASKS as _SIMPLE_TASK_ENUMS
+from blockthrough.waste.suggest import suggest_alternative
 
 logging.basicConfig(
     level=logging.INFO,

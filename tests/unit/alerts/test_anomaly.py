@@ -6,14 +6,14 @@ import math
 
 import pytest
 
-from agentproof.alerts.anomaly import (
+from blockthrough.alerts.anomaly import (
     AnomalyResult,
     classify_spend_anomaly,
     compute_z_score,
     detect_failure_rate_spike,
     detect_model_switch,
 )
-from agentproof.alerts.types import AlertSeverity
+from blockthrough.alerts.types import AlertSeverity
 
 
 class TestZScoreCalculation:

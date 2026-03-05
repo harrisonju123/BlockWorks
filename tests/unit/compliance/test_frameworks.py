@@ -9,10 +9,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from agentproof.compliance.builder import build_audit_record_from_row
-from agentproof.compliance.frameworks import get_required_fields, validate_compliance
-from agentproof.compliance.report import generate_audit_report
-from agentproof.compliance.types import (
+from blockthrough.compliance.builder import build_audit_record_from_row
+from blockthrough.compliance.frameworks import get_required_fields, validate_compliance
+from blockthrough.compliance.report import generate_audit_report
+from blockthrough.compliance.types import (
     AuditRecord,
     AuditReport,
     ComplianceFramework,

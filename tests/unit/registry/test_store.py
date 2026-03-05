@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.registry.store import (
+from blockthrough.registry.store import (
     InsufficientStakeError,
     ListingNotFoundError,
     ListingPermissionError,
     RegistryStore,
 )
-from agentproof.registry.types import (
+from blockthrough.registry.types import (
     AgentListing,
     ListingCategory,
     ListingStatus,
@@ -20,8 +20,8 @@ from agentproof.registry.types import (
     PricingModel,
     RegistrySearchQuery,
 )
-from agentproof.trust.registry import TrustRegistry
-from agentproof.trust.types import TrustDimension
+from blockthrough.trust.registry import TrustRegistry
+from blockthrough.trust.types import TrustDimension
 
 
 def _make_listing(**overrides) -> AgentListing:

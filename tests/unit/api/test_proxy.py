@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from agentproof.api.routes.proxy import (
+from blockthrough.api.routes.proxy import (
     _StreamAccumulator,
     _build_upstream_headers,
     _compute_cost,
@@ -20,7 +20,7 @@ from agentproof.api.routes.proxy import (
     _request_uses_tools,
     _request_uses_tools_anthropic,
 )
-from agentproof.types import LLMEvent
+from blockthrough.types import LLMEvent
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +247,7 @@ def mock_app():
     """Create a test app with mocked http_client and event_queue."""
     from fastapi.testclient import TestClient
 
-    from agentproof.api.routes.proxy import router
+    from blockthrough.api.routes.proxy import router
 
     from fastapi import FastAPI
     app = FastAPI()

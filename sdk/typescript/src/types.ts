@@ -1,9 +1,9 @@
 /**
- * AgentProof TypeScript SDK Types
+ * BlockThrough TypeScript SDK Types
  *
  * Mirrors the Python API schemas so TypeScript consumers get
  * full type safety. Each interface maps 1:1 to a Pydantic model
- * in src/agentproof/api/schemas.py.
+ * in src/blockthrough/api/schemas.py.
  */
 
 // -- Enums -------------------------------------------------------------------
@@ -197,7 +197,7 @@ export interface HealthResponse {
 
 // -- SDK Config --------------------------------------------------------------
 
-export interface AgentProofConfig {
+export interface BlockThroughConfig {
   apiUrl: string;
   apiKey?: string;
   timeoutMs?: number;

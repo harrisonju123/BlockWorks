@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from agentproof.waste.detectors.redundant_calls import detect_redundant_calls
-from agentproof.waste.types import WasteCategory, WasteSeverity
+from blockthrough.waste.detectors.redundant_calls import detect_redundant_calls
+from blockthrough.waste.types import WasteCategory, WasteSeverity
 
 
 def _dup_row(

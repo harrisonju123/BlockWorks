@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.interop.adapters.crewai_adapter import CrewAIAdapter
-from agentproof.interop.adapters.generic_adapter import GenericHTTPAdapter
-from agentproof.interop.adapters.langchain_adapter import LangChainAdapter
-from agentproof.interop.types import InvocationRequest, InvocationStatus
+from blockthrough.interop.adapters.crewai_adapter import CrewAIAdapter
+from blockthrough.interop.adapters.generic_adapter import GenericHTTPAdapter
+from blockthrough.interop.adapters.langchain_adapter import LangChainAdapter
+from blockthrough.interop.types import InvocationRequest, InvocationStatus
 
 
 def _make_request(**overrides) -> InvocationRequest:

@@ -1,5 +1,5 @@
 /**
- * AgentProof VS Code Extension
+ * BlockThrough VS Code Extension
  *
  * Scaffold for a VS Code extension that shows real-time LLM cost
  * in the status bar and provides commands for viewing stats and
@@ -12,7 +12,7 @@
 
 import * as vscode from "vscode";
 
-// -- Types matching the AgentProof API response shapes -----------------------
+// -- Types matching the BlockThrough API response shapes -----------------------
 
 interface StatsResponse {
   total_requests: number;
@@ -28,7 +28,7 @@ interface WasteScoreResponse {
 
 // -- API Client (stub) -------------------------------------------------------
 
-class AgentProofApiClient {
+class BlockThroughApiClient {
   private baseUrl: string;
   private apiKey: string;
 
@@ -47,7 +47,7 @@ class AgentProofApiClient {
 
     const response = await fetch(`${this.baseUrl}${path}`, { headers });
     if (!response.ok) {
-      throw new Error(`AgentProof API ${response.status}: ${response.statusText}`);
+      throw new Error(`BlockThrough API ${response.status}: ${response.statusText}`);
     }
     return (await response.json()) as T;
   }
@@ -65,15 +65,15 @@ class AgentProofApiClient {
 
 let statusBarItem: vscode.StatusBarItem | undefined;
 let pollInterval: ReturnType<typeof setInterval> | undefined;
-let apiClient: AgentProofApiClient | undefined;
+let apiClient: BlockThroughApiClient | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  const config = vscode.workspace.getConfiguration("agentproof");
+  const config = vscode.workspace.getConfiguration("blockthrough");
 
   // Initialize API client
   const apiUrl = config.get<string>("apiUrl", "http://localhost:8100");
   const apiKey = config.get<string>("apiKey", "");
-  apiClient = new AgentProofApiClient(apiUrl, apiKey);
+  apiClient = new BlockThroughApiClient(apiUrl, apiKey);
 
   // Status bar item — shows real-time session cost
   if (config.get<boolean>("statusBar.enabled", true)) {
@@ -81,8 +81,8 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.StatusBarAlignment.Right,
       100,
     );
-    statusBarItem.command = "agentproof.showSessionStats";
-    statusBarItem.tooltip = "AgentProof: Click to view session stats";
+    statusBarItem.command = "blockthrough.showSessionStats";
+    statusBarItem.tooltip = "BlockThrough: Click to view session stats";
     statusBarItem.text = "$(pulse) AP: --";
     statusBarItem.show();
     context.subscriptions.push(statusBarItem);
@@ -95,19 +95,19 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Register commands
   context.subscriptions.push(
-    vscode.commands.registerCommand("agentproof.showSessionStats", showSessionStats),
-    vscode.commands.registerCommand("agentproof.showWasteScore", showWasteScore),
-    vscode.commands.registerCommand("agentproof.configure", configureApiUrl),
+    vscode.commands.registerCommand("blockthrough.showSessionStats", showSessionStats),
+    vscode.commands.registerCommand("blockthrough.showWasteScore", showWasteScore),
+    vscode.commands.registerCommand("blockthrough.configure", configureApiUrl),
   );
 
   // Watch for config changes so the user can update the API URL without reloading
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("agentproof")) {
-        const newConfig = vscode.workspace.getConfiguration("agentproof");
+      if (e.affectsConfiguration("blockthrough")) {
+        const newConfig = vscode.workspace.getConfiguration("blockthrough");
         const newUrl = newConfig.get<string>("apiUrl", "http://localhost:8100");
         const newKey = newConfig.get<string>("apiKey", "");
-        apiClient = new AgentProofApiClient(newUrl, newKey);
+        apiClient = new BlockThroughApiClient(newUrl, newKey);
       }
     }),
   );
@@ -133,14 +133,14 @@ async function updateStatusBar(): Promise<void> {
     const costStr = stats.total_cost_usd.toFixed(2);
     statusBarItem.text = `$(pulse) AP: $${costStr}`;
     statusBarItem.tooltip =
-      `AgentProof Session Stats\n` +
+      `BlockThrough Session Stats\n` +
       `Requests: ${stats.total_requests}\n` +
       `Cost: $${costStr}\n` +
       `Tokens: ${stats.total_tokens.toLocaleString()}\n` +
       `Failure rate: ${(stats.failure_rate * 100).toFixed(1)}%`;
   } catch {
     statusBarItem.text = "$(pulse) AP: offline";
-    statusBarItem.tooltip = "AgentProof: Could not reach API server";
+    statusBarItem.tooltip = "BlockThrough: Could not reach API server";
   }
 }
 
@@ -148,7 +148,7 @@ async function updateStatusBar(): Promise<void> {
 
 async function showSessionStats(): Promise<void> {
   if (!apiClient) {
-    vscode.window.showErrorMessage("AgentProof: API client not initialized");
+    vscode.window.showErrorMessage("BlockThrough: API client not initialized");
     return;
   }
 
@@ -156,8 +156,8 @@ async function showSessionStats(): Promise<void> {
     const stats = await apiClient.getStats();
 
     const panel = vscode.window.createWebviewPanel(
-      "agentproofStats",
-      "AgentProof: Session Stats",
+      "blockthroughStats",
+      "BlockThrough: Session Stats",
       vscode.ViewColumn.One,
       {},
     );
@@ -174,7 +174,7 @@ async function showSessionStats(): Promise<void> {
         </style>
       </head>
       <body>
-        <h1>AgentProof Session Stats</h1>
+        <h1>BlockThrough Session Stats</h1>
         <div class="stat">
           <span class="label">Total Requests:</span>
           <span class="value">${stats.total_requests.toLocaleString()}</span>
@@ -196,14 +196,14 @@ async function showSessionStats(): Promise<void> {
     `;
   } catch (err) {
     vscode.window.showErrorMessage(
-      `AgentProof: Failed to fetch stats — ${err}`,
+      `BlockThrough: Failed to fetch stats — ${err}`,
     );
   }
 }
 
 async function showWasteScore(): Promise<void> {
   if (!apiClient) {
-    vscode.window.showErrorMessage("AgentProof: API client not initialized");
+    vscode.window.showErrorMessage("BlockThrough: API client not initialized");
     return;
   }
 
@@ -213,34 +213,34 @@ async function showWasteScore(): Promise<void> {
     const savings = waste.total_potential_savings_usd.toFixed(2);
 
     vscode.window.showInformationMessage(
-      `AgentProof Waste Score: ${scorePct}% — ` +
+      `BlockThrough Waste Score: ${scorePct}% — ` +
         `Potential savings: $${savings}/period`,
     );
   } catch (err) {
     vscode.window.showErrorMessage(
-      `AgentProof: Failed to fetch waste score — ${err}`,
+      `BlockThrough: Failed to fetch waste score — ${err}`,
     );
   }
 }
 
 async function configureApiUrl(): Promise<void> {
   const currentUrl = vscode.workspace
-    .getConfiguration("agentproof")
+    .getConfiguration("blockthrough")
     .get<string>("apiUrl", "http://localhost:8100");
 
   const newUrl = await vscode.window.showInputBox({
-    prompt: "Enter AgentProof API URL",
+    prompt: "Enter BlockThrough API URL",
     value: currentUrl,
     placeHolder: "http://localhost:8100",
   });
 
   if (newUrl !== undefined) {
     await vscode.workspace
-      .getConfiguration("agentproof")
+      .getConfiguration("blockthrough")
       .update("apiUrl", newUrl, vscode.ConfigurationTarget.Global);
 
     vscode.window.showInformationMessage(
-      `AgentProof API URL updated to: ${newUrl}`,
+      `BlockThrough API URL updated to: ${newUrl}`,
     );
   }
 }

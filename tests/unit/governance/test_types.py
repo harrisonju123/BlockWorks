@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agentproof.governance.types import (
+from blockthrough.governance.types import (
     GovernanceConfig,
     Proposal,
     ProposalStatus,

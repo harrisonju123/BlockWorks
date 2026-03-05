@@ -1,5 +1,9 @@
 # AgentProof
 
+## Project Architecture
+
+This project uses Python (primary backend), Go, TypeScript (dashboard frontend), and YAML configs. The stack includes LiteLLM proxy, Docker Compose, and blockchain/EVM components. When debugging API errors, trace the full request chain: Frontend → AgentProof backend → LiteLLM → upstream model provider.
+
 ## Development Workflow
 
 ### Task Lifecycle
@@ -35,12 +39,30 @@ When running multiple tracks in parallel via background agents, each agent must 
 - `make claude` launches Claude Code pointed at the proxy (`ANTHROPIC_BASE_URL=http://localhost:8100`).
 - `make dev-proxy` optionally starts a local LiteLLM proxy on :4000 for testing the callback without an external proxy.
 
+### Workflow Preferences
+
+Prefer implementing changes over producing plan documents. If a task can be done in the current session, do it rather than writing a plan. Only produce plans when explicitly asked or when the scope genuinely requires user approval first.
+
 ### Architecture Decisions
 
 Store architecture decisions in `.tracker/decisions/` as `ADR-NNN-<slug>.md`. Reference these from initiative files when relevant. Format:
 - **Context** — why this decision was needed
 - **Decision** — what we chose
 - **Consequences** — tradeoffs accepted
+
+---
+
+## Debugging
+
+When fixing bugs, test each fix in isolation before moving on. Do not chain multiple fixes together - verify one works before attempting the next.
+
+## Development Environment
+
+Always rebuild Docker containers after code changes before testing. Run `docker compose up --build` rather than assuming running containers have the latest code.
+
+## Git Operations
+
+When the user provides an explicit strategy (e.g., 'prioritize branch X for all conflicts'), follow it exactly. Do not override with your own judgment about which version is architecturally better.
 
 ---
 
@@ -147,6 +169,7 @@ Base class provides: pool management (`_ensure_pool`, `_close_pool`), `shutdown(
 - Shared test fixtures: `make_litellm_kwargs()`, `make_callback()`, `seed_events()`, `wait_for_flush()` in integration conftest
 - Mock classes for LiteLLM responses are module-level (not recreated per call) for benchmark accuracy
 - `setup_class` (not `setup_method`) for expensive deterministic computations
+- After modifying seed data, classifier keywords, or routing logic, always run the full test suite (`pytest` or equivalent) before considering the task complete.
 
 ### Dashboard
 

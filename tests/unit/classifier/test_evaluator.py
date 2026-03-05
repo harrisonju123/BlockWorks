@@ -5,8 +5,8 @@ assert that the rules-based classifier meets the Phase 0 accuracy
 targets from the initiative spec.
 """
 
-from agentproof.classifier.evaluator import evaluate, load_dataset
-from agentproof.types import TaskType
+from blockthrough.classifier.evaluator import evaluate, load_dataset
+from blockthrough.types import TaskType
 
 
 class TestEvaluatorAccuracy:

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.revenue.calculator import SplitCalculationError, calculate_shares
-from agentproof.revenue.types import SplitBasis, SplitRule
+from blockthrough.revenue.calculator import SplitCalculationError, calculate_shares
+from blockthrough.revenue.types import SplitBasis, SplitRule
 
 
 # ---------------------------------------------------------------------------

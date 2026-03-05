@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentproof.fitness.trends import compute_trend_slope, get_trends
-from agentproof.fitness.types import TrendPoint
+from blockthrough.fitness.trends import compute_trend_slope, get_trends
+from blockthrough.fitness.types import TrendPoint
 
 
 # ---------------------------------------------------------------------------

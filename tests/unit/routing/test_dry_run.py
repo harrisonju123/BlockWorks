@@ -11,10 +11,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.routing.dry_run import DryRunReport, _estimate_routed_cost, dry_run
-from agentproof.routing.router import FitnessCache
-from agentproof.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.routing.dry_run import DryRunReport, _estimate_routed_cost, dry_run
+from blockthrough.routing.router import FitnessCache
+from blockthrough.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
 
 
 def _mock_row(**kwargs) -> MagicMock:

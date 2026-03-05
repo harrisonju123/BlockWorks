@@ -8,16 +8,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from agentproof.attestation.hashing import (
+from blockthrough.attestation.hashing import (
     build_merkle_root,
     build_trace_leaf,
     hash_fitness_matrix,
     hash_metrics,
     hash_org_id,
 )
-from agentproof.attestation.merkle import EMPTY_LEAF, MerkleTree
-from agentproof.attestation.types import AttestationMetrics, TraceEvaluation
-from agentproof.benchmarking.types import FitnessEntry
+from blockthrough.attestation.merkle import EMPTY_LEAF, MerkleTree
+from blockthrough.attestation.types import AttestationMetrics, TraceEvaluation
+from blockthrough.benchmarking.types import FitnessEntry
 
 
 class TestHashMetrics:

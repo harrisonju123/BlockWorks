@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from agentproof.benchmarking.eval_set import EvalPrompt, load_eval_set, to_messages
-from agentproof.types import TaskType
+from blockthrough.benchmarking.eval_set import EvalPrompt, load_eval_set, to_messages
+from blockthrough.types import TaskType
 
 
 def _make_jsonl_file(entries: list[dict], tmp_path: Path) -> Path:

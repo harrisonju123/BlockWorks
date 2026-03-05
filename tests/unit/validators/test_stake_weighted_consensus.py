@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.validators.consensus import StakeWeightedConsensusEngine
-from agentproof.validators.registry import ValidatorRegistry
-from agentproof.validators.types import ValidationSubmission
+from blockthrough.validators.consensus import StakeWeightedConsensusEngine
+from blockthrough.validators.registry import ValidatorRegistry
+from blockthrough.validators.types import ValidationSubmission
 
 
 # ---------------------------------------------------------------------------

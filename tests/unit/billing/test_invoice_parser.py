@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.billing.invoice_parser import parse_anthropic_invoice, parse_openai_invoice
+from blockthrough.billing.invoice_parser import parse_anthropic_invoice, parse_openai_invoice
 
 
 PERIOD_START = "2026-03-01T00:00:00Z"

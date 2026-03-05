@@ -6,14 +6,14 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.channels.manager import ChannelManager
-from agentproof.channels.types import ChannelConfig
-from agentproof.interop.adapters.crewai_adapter import CrewAIAdapter
-from agentproof.interop.adapters.generic_adapter import GenericHTTPAdapter
-from agentproof.interop.adapters.langchain_adapter import LangChainAdapter
-from agentproof.interop.bridge import DiscoveryBridge
-from agentproof.registry.store import ListingNotFoundError, RegistryStore
-from agentproof.registry.types import (
+from blockthrough.channels.manager import ChannelManager
+from blockthrough.channels.types import ChannelConfig
+from blockthrough.interop.adapters.crewai_adapter import CrewAIAdapter
+from blockthrough.interop.adapters.generic_adapter import GenericHTTPAdapter
+from blockthrough.interop.adapters.langchain_adapter import LangChainAdapter
+from blockthrough.interop.bridge import DiscoveryBridge
+from blockthrough.registry.store import ListingNotFoundError, RegistryStore
+from blockthrough.registry.types import (
     AgentListing,
     ListingCategory,
     MCPServerListing,

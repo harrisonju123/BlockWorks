@@ -6,14 +6,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from agentproof.mcp.extractor import (
+from blockthrough.mcp.extractor import (
     build_execution_graph,
     extract_mcp_calls,
     extract_mcp_calls_from_tool_calls,
     parse_mcp_tool_name,
 )
-from agentproof.mcp.types import MCPCall
-from agentproof.types import EventStatus
+from blockthrough.mcp.types import MCPCall
+from blockthrough.types import EventStatus
 
 
 class TestParseMCPToolName:

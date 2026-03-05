@@ -378,7 +378,7 @@ SELECT add_retention_policy('alert_history', INTERVAL '365 days');
 
 ## 4. New Pydantic Models
 
-These go in `/Users/hju/Documents/BlockWorks/src/agentproof/types.py` alongside the existing `LLMEvent`.
+These go in `/Users/hju/Documents/BlockWorks/src/blockthrough/types.py` alongside the existing `LLMEvent`.
 
 ```python
 from __future__ import annotations
@@ -573,7 +573,7 @@ The sample rate is controlled per `(org_id, task_type)` and stored in a config t
 
 ### 5c. MCP Tracing: Extend the Existing Callback
 
-**Decision:** Extend `AgentProofCallback._build_event` to parse MCP tool_use content blocks, not build a separate callback.
+**Decision:** Extend `BlockThroughCallback._build_event` to parse MCP tool_use content blocks, not build a separate callback.
 
 MCP tool invocations appear in the LLM response as `tool_use` content blocks with a specific structure. The callback already iterates over `message.tool_calls`. The extension:
 
@@ -697,7 +697,7 @@ async def dispatch_alert(rule: AlertRule, message: str, context: dict) -> None:
     if rule.channel in (AlertChannel.EMAIL, AlertChannel.BOTH):
         await send_email(
             to=rule.threshold["email"],
-            subject=f"[AgentProof] {rule.rule_type.value} alert",
+            subject=f"[BlockThrough] {rule.rule_type.value} alert",
             body=message,
         )
 ```

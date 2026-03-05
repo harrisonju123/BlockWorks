@@ -22,4 +22,4 @@ RUN pip install --no-cache-dir -e ".[dev,blockchain]"
 # Prod target: minimal image
 FROM base AS prod
 EXPOSE 8100
-CMD ["uvicorn", "agentproof.api.app:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "4"]
+CMD ["uvicorn", "blockthrough.api.app:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "4"]

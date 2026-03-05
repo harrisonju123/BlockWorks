@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.benchmarking.types import FitnessEntry
-from agentproof.models import MODEL_CATALOG
-from agentproof.waste.suggest import suggest_alternative
+from blockthrough.benchmarking.types import FitnessEntry
+from blockthrough.models import MODEL_CATALOG
+from blockthrough.waste.suggest import suggest_alternative
 
 
 def _fitness(

@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agentproof.revenue.types import (
+from blockthrough.revenue.types import (
     ProtocolFee,
     RevenueConfig,
     RevenueShare,

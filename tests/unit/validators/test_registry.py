@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.validators.registry import RegistryError, ValidatorRegistry
+from blockthrough.validators.registry import RegistryError, ValidatorRegistry
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentproof"
+name = "blockthrough"
 version = "0.1.0"
 description = "AI agent observability, benchmarking, and attestation platform"
 requires-python = ">=3.12"
@@ -44,10 +44,10 @@ ml = [
 ]
 
 [project.scripts]
-agentproof = "agentproof.cli.main:app"
+blockthrough = "blockthrough.cli.main:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentproof"]
+packages = ["src/blockthrough"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

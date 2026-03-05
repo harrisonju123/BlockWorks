@@ -11,15 +11,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agentproof.attestation.builder import ZERO_HASH, build_attestation
-from agentproof.attestation.hashing import (
+from blockthrough.attestation.builder import ZERO_HASH, build_attestation
+from blockthrough.attestation.hashing import (
     build_merkle_root,
     hash_fitness_matrix,
     hash_metrics,
     hash_org_id,
 )
-from agentproof.attestation.types import AttestationMetrics, TraceEvaluation
-from agentproof.benchmarking.types import FitnessEntry
+from blockthrough.attestation.types import AttestationMetrics, TraceEvaluation
+from blockthrough.benchmarking.types import FitnessEntry
 
 
 def _make_metrics() -> AttestationMetrics:
@@ -72,17 +72,17 @@ class TestBuildAttestation:
 
         with (
             patch(
-                "agentproof.attestation.builder.get_attestation_metrics",
+                "blockthrough.attestation.builder.get_attestation_metrics",
                 new_callable=AsyncMock,
                 return_value=metrics,
             ) as mock_metrics,
             patch(
-                "agentproof.attestation.builder.get_trace_evaluations",
+                "blockthrough.attestation.builder.get_trace_evaluations",
                 new_callable=AsyncMock,
                 return_value=evaluations,
             ) as mock_evals,
             patch(
-                "agentproof.db.queries.get_fitness_matrix",
+                "blockthrough.db.queries.get_fitness_matrix",
                 new_callable=AsyncMock,
                 return_value=fitness,
             ),
@@ -124,17 +124,17 @@ class TestBuildAttestation:
 
         with (
             patch(
-                "agentproof.attestation.builder.get_attestation_metrics",
+                "blockthrough.attestation.builder.get_attestation_metrics",
                 new_callable=AsyncMock,
                 return_value=_make_metrics(),
             ),
             patch(
-                "agentproof.attestation.builder.get_trace_evaluations",
+                "blockthrough.attestation.builder.get_trace_evaluations",
                 new_callable=AsyncMock,
                 return_value=_make_evaluations(),
             ),
             patch(
-                "agentproof.db.queries.get_fitness_matrix",
+                "blockthrough.db.queries.get_fitness_matrix",
                 new_callable=AsyncMock,
                 return_value=_make_fitness_entries(),
             ),
@@ -156,17 +156,17 @@ class TestBuildAttestation:
 
         with (
             patch(
-                "agentproof.attestation.builder.get_attestation_metrics",
+                "blockthrough.attestation.builder.get_attestation_metrics",
                 new_callable=AsyncMock,
                 return_value=_make_metrics(),
             ),
             patch(
-                "agentproof.attestation.builder.get_trace_evaluations",
+                "blockthrough.attestation.builder.get_trace_evaluations",
                 new_callable=AsyncMock,
                 return_value=[],
             ),
             patch(
-                "agentproof.db.queries.get_fitness_matrix",
+                "blockthrough.db.queries.get_fitness_matrix",
                 new_callable=AsyncMock,
                 return_value=_make_fitness_entries(),
             ),
@@ -189,17 +189,17 @@ class TestBuildAttestation:
 
         with (
             patch(
-                "agentproof.attestation.builder.get_attestation_metrics",
+                "blockthrough.attestation.builder.get_attestation_metrics",
                 new_callable=AsyncMock,
                 return_value=_make_metrics(),
             ),
             patch(
-                "agentproof.attestation.builder.get_trace_evaluations",
+                "blockthrough.attestation.builder.get_trace_evaluations",
                 new_callable=AsyncMock,
                 return_value=_make_evaluations(),
             ),
             patch(
-                "agentproof.db.queries.get_fitness_matrix",
+                "blockthrough.db.queries.get_fitness_matrix",
                 new_callable=AsyncMock,
                 return_value=_make_fitness_entries(),
             ),

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.routing.ab_test import ABTestConfig, assign_group, get_policy
-from agentproof.routing.policy import default_policy
-from agentproof.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
+from blockthrough.routing.ab_test import ABTestConfig, assign_group, get_policy
+from blockthrough.routing.policy import default_policy
+from blockthrough.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
 
 
 class TestAssignGroup:

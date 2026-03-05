@@ -1,7 +1,7 @@
 {
-  "name": "@agentproof/sdk",
+  "name": "@blockthrough/sdk",
   "version": "0.1.0",
-  "description": "AgentProof TypeScript SDK — LLM observability, waste detection, and benchmarking",
+  "description": "BlockThrough TypeScript SDK — LLM observability, waste detection, and benchmarking",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -16,7 +16,7 @@
     "ai",
     "cost",
     "benchmarking",
-    "agentproof"
+    "blockthrough"
   ],
   "license": "MIT",
   "files": [

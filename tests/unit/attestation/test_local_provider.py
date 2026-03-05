@@ -12,9 +12,9 @@ from datetime import datetime, timezone
 import pytest
 
 
-from agentproof.attestation.hashing import compute_chain_hash
-from agentproof.attestation.local_provider import ZERO_HASH, LocalProvider
-from agentproof.attestation.provider import AttestationError
+from blockthrough.attestation.hashing import compute_chain_hash
+from blockthrough.attestation.local_provider import ZERO_HASH, LocalProvider
+from blockthrough.attestation.provider import AttestationError
 
 from .conftest import PERIOD_END, PERIOD_START, make_record
 

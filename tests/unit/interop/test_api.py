@@ -7,15 +7,15 @@ from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from agentproof.api.app import app
-from agentproof.api.routes.interop import (
+from blockthrough.api.app import app
+from blockthrough.api.routes.interop import (
     _get_bridge,
     _get_metering,
     _get_registry,
     reset_stores,
 )
-from agentproof.config import get_config
-from agentproof.registry.types import (
+from blockthrough.config import get_config
+from blockthrough.registry.types import (
     AgentListing,
     ListingCategory,
     MCPServerListing,

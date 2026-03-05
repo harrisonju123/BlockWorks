@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.interop.protocol import (
+from blockthrough.interop.protocol import (
     PROTOCOL_VERSION,
     ProtocolError,
     create_invocation,
@@ -16,7 +16,7 @@ from agentproof.interop.protocol import (
     validate_message,
     verify_message_signature,
 )
-from agentproof.interop.types import (
+from blockthrough.interop.types import (
     InvocationRequest,
     InvocationResponse,
     InvocationStatus,

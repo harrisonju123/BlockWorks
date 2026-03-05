@@ -1,13 +1,13 @@
 # CrewAI Integration
 
-Route CrewAI agent LLM calls through AgentProof's LiteLLM proxy to capture every request for observability, cost tracking, and task classification.
+Route CrewAI agent LLM calls through BlockThrough's LiteLLM proxy to capture every request for observability, cost tracking, and task classification.
 
 CrewAI uses LiteLLM under the hood for model routing, which makes integration straightforward — set two environment variables and every agent call flows through the proxy automatically.
 
 ## Prerequisites
 
 - Docker running locally
-- AgentProof stack up: `docker compose up -d`
+- BlockThrough stack up: `docker compose up -d`
 - Your LLM provider API key(s) set in `.env` (Anthropic, OpenAI, etc.)
 - CrewAI installed:
 
@@ -53,7 +53,7 @@ python my_crew.py
 
 ## Agent Definition Example
 
-A minimal CrewAI setup where all LLM calls are automatically captured by AgentProof:
+A minimal CrewAI setup where all LLM calls are automatically captured by BlockThrough:
 
 ```python
 import os
@@ -92,7 +92,7 @@ print(result)
 
 ## Multi-Agent Workflows
 
-CrewAI's multi-agent workflows generate multiple LLM calls per task — one for each agent interaction, planning step, and delegation. AgentProof captures each call individually with trace context, so you can see the full breakdown:
+CrewAI's multi-agent workflows generate multiple LLM calls per task — one for each agent interaction, planning step, and delegation. BlockThrough captures each call individually with trace context, so you can see the full breakdown:
 
 ```python
 researcher = Agent(
@@ -157,7 +157,7 @@ After running a CrewAI workflow through the proxy:
 curl -s http://localhost:8100/api/v1/events | jq '.total_count'
 
 # CLI summary
-agentproof stats
+blockthrough stats
 
 # Dashboard
 open http://localhost:8081
@@ -210,14 +210,14 @@ curl -s http://localhost:4000/v1/models -H "Authorization: Bearer sk-local-dev-k
 
 **Agent name not detected**
 
-AgentProof attempts to auto-detect agent names from request metadata. CrewAI doesn't always set identifiable headers. If you need per-agent attribution, you can pass metadata explicitly by configuring the LiteLLM SDK in your CrewAI setup.
+BlockThrough attempts to auto-detect agent names from request metadata. CrewAI doesn't always set identifiable headers. If you need per-agent attribution, you can pass metadata explicitly by configuring the LiteLLM SDK in your CrewAI setup.
 
 **Events not appearing**
 
 1. Confirm the API: `curl http://localhost:8100/health`
 2. Confirm the env vars are set: `echo $OPENAI_API_BASE` should print `http://localhost:4000/v1`
 3. Confirm requests route through LiteLLM: `docker compose logs litellm --tail=20`
-4. Check for callback errors: `docker compose logs litellm | grep -i "callback\|agentproof"`
+4. Check for callback errors: `docker compose logs litellm | grep -i "callback\|blockthrough"`
 
 **CrewAI using wrong base URL**
 
@@ -229,4 +229,4 @@ env | grep -iE "openai|litellm"
 
 **High token usage**
 
-CrewAI's internal planning and validation steps add LLM calls beyond your explicit tasks. This is expected. Use the AgentProof dashboard to see the full breakdown and identify which steps consume the most tokens.
+CrewAI's internal planning and validation steps add LLM calls beyond your explicit tasks. This is expected. Use the BlockThrough dashboard to see the full breakdown and identify which steps consume the most tokens.

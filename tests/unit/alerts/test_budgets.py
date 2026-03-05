@@ -7,12 +7,12 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agentproof.alerts.budgets import (
+from blockthrough.alerts.budgets import (
     BudgetCheckResult,
     check_budget,
 )
-from agentproof.models import MODEL_CATALOG
-from agentproof.alerts.types import (
+from blockthrough.models import MODEL_CATALOG
+from blockthrough.alerts.types import (
     AlertSeverity,
     BudgetAction,
     BudgetConfig,

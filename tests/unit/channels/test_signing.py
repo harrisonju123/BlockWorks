@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 
-from agentproof.channels.signing import sign_payment, verify_signature
+from blockthrough.channels.signing import sign_payment, verify_signature
 
 
 # ---------------------------------------------------------------------------

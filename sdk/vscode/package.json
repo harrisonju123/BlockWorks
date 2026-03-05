@@ -1,9 +1,9 @@
 {
-  "name": "agentproof-vscode",
-  "displayName": "AgentProof",
+  "name": "blockthrough-vscode",
+  "displayName": "BlockThrough",
   "description": "Real-time LLM cost monitoring and waste detection for AI-powered development",
   "version": "0.1.0",
-  "publisher": "agentproof",
+  "publisher": "blockthrough",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -16,7 +16,7 @@
     "ai",
     "cost",
     "observability",
-    "agentproof"
+    "blockthrough"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -25,37 +25,37 @@
   "contributes": {
     "commands": [
       {
-        "command": "agentproof.showSessionStats",
-        "title": "AgentProof: Show Session Stats"
+        "command": "blockthrough.showSessionStats",
+        "title": "BlockThrough: Show Session Stats"
       },
       {
-        "command": "agentproof.showWasteScore",
-        "title": "AgentProof: Show Waste Score"
+        "command": "blockthrough.showWasteScore",
+        "title": "BlockThrough: Show Waste Score"
       },
       {
-        "command": "agentproof.configure",
-        "title": "AgentProof: Configure API URL"
+        "command": "blockthrough.configure",
+        "title": "BlockThrough: Configure API URL"
       }
     ],
     "configuration": {
-      "title": "AgentProof",
+      "title": "BlockThrough",
       "properties": {
-        "agentproof.apiUrl": {
+        "blockthrough.apiUrl": {
           "type": "string",
           "default": "http://localhost:8100",
-          "description": "URL of the AgentProof API server"
+          "description": "URL of the BlockThrough API server"
         },
-        "agentproof.apiKey": {
+        "blockthrough.apiKey": {
           "type": "string",
           "default": "",
           "description": "API key for authenticated access (optional for local)"
         },
-        "agentproof.statusBar.enabled": {
+        "blockthrough.statusBar.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Show real-time cost in the status bar"
         },
-        "agentproof.statusBar.refreshIntervalMs": {
+        "blockthrough.statusBar.refreshIntervalMs": {
           "type": "number",
           "default": 30000,
           "description": "How often to refresh the status bar (milliseconds)"

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from agentproof.routing.policy import (
+from blockthrough.routing.policy import (
     PolicyValidationError,
     default_policy,
     load_policy,
     validate_policy,
 )
-from agentproof.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
+from blockthrough.routing.types import RoutingPolicy, RoutingRule, SelectionCriteria
 
 
 class TestLoadPolicy:

@@ -1,4 +1,4 @@
-# BlockWorks
+# Blockthrough
 
 AI agent observability, benchmarking, and on-chain attestation platform. Two deployment modes: **transparent HTTP proxy** (recommended — zero config on your LLM provider) or **LiteLLM callback** (if you control the proxy host). Every LLM request is captured for cost analysis, waste detection, quality benchmarking, and cryptographic attestation.
 
@@ -6,11 +6,11 @@ AI agent observability, benchmarking, and on-chain attestation platform. Two dep
 
 ### Proxy Mode (recommended)
 
-AgentProof sits between your agent and the upstream LLM provider, capturing all traffic transparently. An embedded Anvil node provides on-chain attestation.
+BlockThrough sits between your agent and the upstream LLM provider, capturing all traffic transparently. An embedded Anvil node provides on-chain attestation.
 
 ```
 ┌─────────────┐     ┌───────────────────┐     ┌───────────────┐
-│  AI Agents  │────▶│  AgentProof :8100  │────▶│  LLM Provider │
+│  AI Agents  │────▶│  BlockThrough :8100  │────▶│  LLM Provider │
 │ (Claude     │     │  (proxy + capture  │     │  (Anthropic,  │
 │  Code, etc.)│     │   + smart routing) │     │   OpenAI, etc)│
 └─────────────┘     └──┬─────────┬──────┘     └───────────────┘
@@ -34,7 +34,7 @@ If you control the LiteLLM proxy host, install the callback directly.
 ┌─────────────┐     ┌──────────────────────┐     ┌──────────────┐
 │  AI Agents  │────▶│  Your LiteLLM Proxy  │────▶│ LLM Provider │
 │ (Claude,    │     │                      │     │ (Anthropic,  │
-│  GPT, etc.) │     │  + AgentProofCallback │     │  OpenAI)     │
+│  GPT, etc.) │     │  + BlockThroughCallback │     │  OpenAI)     │
 └─────────────┘     └──────────┬───────────┘     └──────────────┘
                                │ async queue
                          ┌─────▼──────┐
@@ -80,11 +80,11 @@ If you control the LiteLLM proxy host, install the callback directly.
 
 ### Option A: Proxy Mode (recommended)
 
-No access to your LLM proxy host required. Point your agents at AgentProof and set the upstream URL.
+No access to your LLM proxy host required. Point your agents at BlockThrough and set the upstream URL.
 
 ```bash
-git clone https://github.com/harrisonju123/BlockWorks.git
-cd BlockWorks
+git clone https://github.com/harrisonju123/blockthrough.git
+cd blockthrough
 
 # Set your upstream LLM provider
 export AGENTPROOF_UPSTREAM_URL=https://your-litellm-proxy.example.com
@@ -96,7 +96,7 @@ make dev
 open http://localhost:8081
 ```
 
-Now point your agent at AgentProof:
+Now point your agent at BlockThrough:
 
 ```bash
 # Claude Code
@@ -117,11 +117,11 @@ If you control the LiteLLM proxy host, install the callback directly:
 
 ```yaml
 litellm_settings:
-  callbacks: ["agentproof.pipeline.callback.AgentProofCallback"]
+  callbacks: ["blockthrough.pipeline.callback.BlockThroughCallback"]
 ```
 
 ```bash
-pip install agentproof
+pip install blockthrough
 export AGENTPROOF_DATABASE_URL=postgresql+asyncpg://agentproof:localdev@localhost:5432/agentproof
 ```
 
@@ -161,7 +161,7 @@ make dev-proxy
 ## Project Structure
 
 ```
-src/agentproof/
+src/blockthrough/
   pipeline/         # LiteLLM callback, async event writer, base worker class
   classifier/       # Rules-based task classification (code gen, summarization, etc.)
   db/               # Shared query helpers (events, stats, aggregates)
@@ -192,12 +192,12 @@ src/agentproof/
   utils.py          # Shared helpers (utcnow)
 
 contracts/src/      # Solidity 0.8.24 (Foundry)
-  AgentProofAttestation.sol   # Batch attestation with chain linkage
-  AgentProofChannel.sol       # State channels for high-freq batching
-  AgentProofStaking.sol       # Validator stake management
-  AgentProofToken.sol         # ERC-20 governance token
-  AgentProofTrust.sol         # On-chain trust score registry
-  AgentProofRevenue.sol       # Revenue distribution splits
+  BlockThroughAttestation.sol   # Batch attestation with chain linkage
+  BlockThroughChannel.sol       # State channels for high-freq batching
+  BlockThroughStaking.sol       # Validator stake management
+  BlockThroughToken.sol         # ERC-20 governance token
+  BlockThroughTrust.sol         # On-chain trust score registry
+  BlockThroughRevenue.sol       # Revenue distribution splits
 
 dashboard/          # React 19 + Vite 6 + Tailwind 4 + Recharts
 ```
@@ -225,10 +225,10 @@ GET  /api/v1/registry/agents        # Registered agent catalog
 ## CLI
 
 ```bash
-agentproof stats              # Spend summary, top traces, waste score
-agentproof stats --period 7d  # Last 7 days
-agentproof waste-report       # Detailed waste analysis
-agentproof evaluate           # Run classifier accuracy eval
+blockthrough stats              # Spend summary, top traces, waste score
+blockthrough stats --period 7d  # Last 7 days
+blockthrough waste-report       # Detailed waste analysis
+blockthrough evaluate           # Run classifier accuracy eval
 ```
 
 ## Testing
@@ -248,7 +248,7 @@ make deploy-local      # Deploy contracts to local Anvil
 
 ### Proxy mode
 
-1. Agent sends LLM request to AgentProof `:8100/v1/*`
+1. Agent sends LLM request to BlockThrough `:8100/v1/*`
 2. The proxy forwards to the upstream provider via `AGENTPROOF_UPSTREAM_URL`
 3. On response, the proxy (non-blocking):
    - Hashes prompt/completion content (SHA-256, never stores raw text)
@@ -264,7 +264,7 @@ make deploy-local      # Deploy contracts to local Anvil
 
 ### Callback mode
 
-Same pipeline, but the `AgentProofCallback` is installed directly on a LiteLLM proxy host instead of using the transparent proxy.
+Same pipeline, but the `BlockThroughCallback` is installed directly on a LiteLLM proxy host instead of using the transparent proxy.
 
 ## Configuration
 

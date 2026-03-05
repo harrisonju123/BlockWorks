@@ -10,7 +10,7 @@ import hashlib
 
 import pytest
 
-from agentproof.attestation.merkle import EMPTY_LEAF, MerkleTree, _hash_pair
+from blockthrough.attestation.merkle import EMPTY_LEAF, MerkleTree, _hash_pair
 
 
 class TestMerkleTreeConstruction:
