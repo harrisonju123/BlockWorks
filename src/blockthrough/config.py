@@ -76,6 +76,17 @@ class BlockThroughConfig(BaseSettings):
     routing_model_low: str = "claude-haiku-4-5-20251001"
     routing_tier1_confidence_threshold: float = 0.7
 
+    # Session-level routing
+    session_max_age_s: int = 3600
+    session_step_down_policy: str = "moderate"
+
+    # Feedback loop
+    feedback_enabled: bool = False
+    feedback_detection_interval_s: int = 300
+    feedback_ema_alpha: float = 0.05
+    feedback_min_samples: int = 20
+    feedback_max_adjustment: float = 0.15
+
     # Alerts & Budgets
     alerts_enabled: bool = True
     alerts_check_interval_s: int = 60

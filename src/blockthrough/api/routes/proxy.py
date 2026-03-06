@@ -252,6 +252,32 @@ async def _maybe_route(
     if task_type is None:
         return model, None, (task_type, confidence, sys_hash)
 
+    # Session phase adjustment: if session is past PLANNING and classifier
+    # confidence is below re-escalation threshold, step down the effective
+    # task_type to the phase's representative type.
+    session_id = request.headers.get("x-session-id")
+    if not session_id:
+        metadata = body.get("metadata") or body.get("litellm_params", {}).get("metadata") or {}
+        session_id = metadata.get("session_id") if isinstance(metadata, dict) else None
+
+    if session_id and task_type is not None:
+        tracker = getattr(request.app.state, "session_tracker", None)
+        if tracker is not None:
+            from blockthrough.routing.session import SessionPhase, PHASE_REPRESENTATIVE
+            phase = tracker.record(session_id, task_type)
+            if phase != SessionPhase.PLANNING:
+                re_esc = tracker.re_escalation_confidence
+                if confidence is not None and confidence >= re_esc:
+                    pass  # Re-escalation: respect the classification
+                else:
+                    representative = PHASE_REPRESENTATIVE.get(phase)
+                    if representative is not None and representative != task_type:
+                        logger.debug(
+                            "Session %s phase=%s: stepping down %s -> %s",
+                            session_id[:8], phase.value, task_type.value, representative.value,
+                        )
+                        task_type = representative
+
     # Gate on classifier confidence — only route when classification is trustworthy
     confidence_threshold = getattr(
         request.app.state, "routing_confidence_threshold",

@@ -1140,6 +1140,33 @@ async def get_routing_decisions(
     return rows, total_count
 
 
+async def get_feedback_aggregates(
+    session: AsyncSession,
+    *,
+    min_samples: int = 20,
+) -> list[dict]:
+    """Aggregate feedback signals over a 30-day window.
+
+    Returns per-(model, task_type) weighted average of quality_delta
+    and sample count, filtered by min_samples.
+    """
+    result = await session.execute(
+        text("""
+            SELECT
+                model,
+                task_type,
+                SUM(quality_delta * weight) / NULLIF(SUM(weight), 0) AS avg_delta,
+                COUNT(*) AS sample_count
+            FROM feedback_signals
+            WHERE created_at > NOW() - INTERVAL '30 days'
+            GROUP BY model, task_type
+            HAVING COUNT(*) >= :min_samples
+        """),
+        {"min_samples": min_samples},
+    )
+    return [dict(r) for r in result.mappings().all()]
+
+
 async def get_benchmark_config_from_db(session: AsyncSession) -> dict | None:
     """Fetch the singleton benchmark config row. Returns None if not yet created."""
     query = text("SELECT * FROM benchmark_config WHERE id = 'default'")

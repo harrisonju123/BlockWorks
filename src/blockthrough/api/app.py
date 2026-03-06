@@ -18,6 +18,7 @@ from blockthrough.api.routes import (
     channels,
     enterprise,
     events,
+    feedback,
     fitness,
     governance,
     health,
@@ -67,7 +68,38 @@ async def _refresh_fitness_cache(app: FastAPI, interval_s: int) -> None:
             synthetic = generate_synthetic_fitness()
             merged = merge_fitness_entries(synthetic, db_entries)
             cache: FitnessCache = app.state.fitness_cache
+
+            # Apply feedback adjustments if enabled (before cache update to avoid double rebuild)
+            if cfg.feedback_enabled:
+                try:
+                    from blockthrough.feedback.adjuster import compute_feedback_adjustments, apply_feedback_adjustments
+                    from blockthrough.db.queries import get_feedback_aggregates
+                    async with get_async_session() as session:
+                        feedback_rows = await get_feedback_aggregates(
+                            session, min_samples=cfg.feedback_min_samples,
+                        )
+                    if feedback_rows:
+                        ema_state = getattr(app.state, "feedback_ema_state", {})
+                        adjustments = compute_feedback_adjustments(
+                            feedback_rows,
+                            alpha=cfg.feedback_ema_alpha,
+                            min_samples=cfg.feedback_min_samples,
+                            max_adjustment=cfg.feedback_max_adjustment,
+                            ema_state=ema_state,
+                        )
+                        if adjustments:
+                            merged = apply_feedback_adjustments(merged, adjustments, synthetic)
+                            logger.debug("Applied %d feedback adjustments", len(adjustments))
+                except Exception:
+                    logger.exception("Feedback adjustment failed, skipping")
+
             cache.update(merged)
+
+            # Prune stale sessions periodically
+            tracker = getattr(app.state, "session_tracker", None)
+            if tracker is not None:
+                tracker.prune()
+
             # Regenerate bootstrap policy with fresh benchmark data;
             # cache key includes fitness timestamp so no manual clear needed
             policy = getattr(app.state, "routing_policy", None)
@@ -190,6 +222,14 @@ async def lifespan(app: FastAPI):
             logger.info("Using bootstrap routing policy (%d rules)", len(resolved_policy.rules))
         app.state.routing_policy = resolved_policy
 
+        # Session tracker for session-level routing
+        from blockthrough.routing.session import SessionTracker, get_step_down_policy
+        session_policy = get_step_down_policy(cfg.session_step_down_policy)
+        app.state.session_tracker = SessionTracker(
+            policy=session_policy,
+            max_age_s=cfg.session_max_age_s,
+        )
+
         # Fetch available models from the upstream so routing only picks
         # models the LiteLLM instance actually has configured.
         # Retry a few times — LiteLLM may not be ready at API startup.
@@ -266,6 +306,18 @@ async def lifespan(app: FastAPI):
         benchmark_worker_task = asyncio.create_task(benchmark_worker.run())
         logger.info("Benchmarking enabled (sample_rate=%.2f)", cfg.benchmark_sample_rate)
 
+    # -- Feedback loop ---------------------------------------------------------
+    feedback_detector_task = None
+    if cfg.feedback_enabled:
+        from blockthrough.feedback.detector import FeedbackDetector
+        feedback_detector = FeedbackDetector(
+            db_url=cfg.database_url,
+            detection_interval_s=cfg.feedback_detection_interval_s,
+        )
+        feedback_detector_task = asyncio.create_task(feedback_detector.run())
+        app.state.feedback_ema_state: dict[tuple[str, str], float] = {}
+        logger.info("Feedback loop enabled (detection interval=%ds)", cfg.feedback_detection_interval_s)
+
     yield
 
     # Shutdown — stop workers BEFORE closing httpx clients, since the
@@ -304,6 +356,17 @@ async def lifespan(app: FastAPI):
             benchmark_worker_task.cancel()
             try:
                 await benchmark_worker_task
+            except asyncio.CancelledError:
+                pass
+
+    if feedback_detector_task:
+        await feedback_detector.shutdown()
+        try:
+            await asyncio.wait_for(feedback_detector_task, timeout=5.0)
+        except asyncio.TimeoutError:
+            feedback_detector_task.cancel()
+            try:
+                await feedback_detector_task
             except asyncio.CancelledError:
                 pass
 
@@ -363,3 +426,4 @@ app.include_router(workflows.router, prefix="/api/v1", tags=["workflows"])
 app.include_router(revenue.router, prefix="/api/v1", tags=["revenue"])
 app.include_router(interop.router, prefix="/api/v1", tags=["interop"])
 app.include_router(mcp.router, prefix="/api/v1", tags=["mcp"])
+app.include_router(feedback.router, prefix="/api/v1", tags=["feedback"])
