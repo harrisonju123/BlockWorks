@@ -5,7 +5,7 @@ assert that the rules-based classifier meets the Phase 0 accuracy
 targets from the initiative spec.
 """
 
-from blockthrough.classifier.evaluator import evaluate, load_dataset
+from blockthrough.classifier.evaluator import PER_TASK_ACCURACY_TARGETS, evaluate, load_dataset
 from blockthrough.types import TaskType
 
 
@@ -22,20 +22,19 @@ class TestEvaluatorAccuracy:
             f"Synthetic dataset has {len(self.examples)} examples, need at least 70"
         )
 
-    def test_overall_accuracy_above_75_percent(self) -> None:
-        assert self.result.accuracy > 0.75, (
-            f"Overall accuracy {self.result.accuracy:.1%} is below the 75% target"
+    def test_overall_accuracy_above_78_percent(self) -> None:
+        assert self.result.accuracy > 0.78, (
+            f"Overall accuracy {self.result.accuracy:.1%} is below the 78% target"
         )
 
-    def test_no_task_type_below_40_percent(self) -> None:
-        # Lowered from 50% after expanding eval set with harder examples
-        # that deliberately stress-test rules-based keyword gaps.
-        # The LLM classifier is expected to push these above 90%.
+    def test_per_task_type_meets_differentiated_targets(self) -> None:
+        """Each task type must meet its routing-impact-weighted accuracy target."""
         expected_types = {ex.expected_task_type.value for ex in self.examples}
         for tt_value in expected_types:
+            target = PER_TASK_ACCURACY_TARGETS.get(tt_value, 0.40)
             acc = self.result.per_class_accuracy(tt_value)
-            assert acc >= 0.40, (
-                f"Task type '{tt_value}' has accuracy {acc:.1%}, below the 40% minimum"
+            assert acc >= target, (
+                f"Task type '{tt_value}' has accuracy {acc:.1%}, below the {target:.0%} target"
             )
 
     def test_correct_confidence_higher_than_incorrect(self) -> None:

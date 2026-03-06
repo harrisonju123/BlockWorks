@@ -1,0 +1,31 @@
+{"task_type": "classification", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "description": "Easy task — Opus overridden to cheapest qualifying model"}
+{"task_type": "classification", "requested_model": "claude-sonnet-4-20250514", "expected_behavior": "override", "description": "Easy task — Sonnet overridden to cheapest qualifying model"}
+{"task_type": "classification", "requested_model": "claude-haiku-4-5-20251001", "expected_behavior": "override", "description": "Easy task — even Haiku overridden to cheaper budget model"}
+{"task_type": "classification", "requested_model": "gpt-4o", "expected_behavior": "override", "description": "Easy task — GPT-4o overridden to cheapest qualifying model"}
+{"task_type": "code_generation", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "description": "Hard task — Opus overridden to best-value model above 0.70 quality"}
+{"task_type": "code_generation", "requested_model": "claude-sonnet-4-20250514", "expected_behavior": "override", "description": "Hard task — Sonnet overridden to best-value model above 0.70 quality"}
+{"task_type": "code_generation", "requested_model": "claude-haiku-4-5-20251001", "expected_behavior": "override", "description": "Hard task — Haiku below 0.70 quality floor, overridden to qualifying model"}
+{"task_type": "code_generation", "requested_model": "gpt-4o", "expected_behavior": "override", "description": "Hard task — GPT-4o overridden to cheaper qualifying model"}
+{"task_type": "code_review", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "description": "Hard task — Opus overridden to best-value model above 0.70 quality"}
+{"task_type": "code_review", "requested_model": "claude-sonnet-4-20250514", "expected_behavior": "override", "description": "Hard task — Sonnet overridden to cheaper qualifying model"}
+{"task_type": "reasoning", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "description": "Hard task — Opus overridden to best-value model above 0.70 quality"}
+{"task_type": "reasoning", "requested_model": "claude-sonnet-4-20250514", "expected_behavior": "override", "description": "Hard task — Sonnet overridden to cheaper qualifying model"}
+{"task_type": "reasoning", "requested_model": "gpt-4o", "expected_behavior": "override", "description": "Hard task — GPT-4o overridden to cheaper qualifying model"}
+{"task_type": "summarization", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "description": "Easy task — Opus overridden to cheapest qualifying model"}
+{"task_type": "summarization", "requested_model": "claude-sonnet-4-20250514", "expected_behavior": "override", "description": "Easy task — Sonnet overridden to cheapest qualifying model"}
+{"task_type": "summarization", "requested_model": "claude-haiku-4-5-20251001", "expected_behavior": "override", "description": "Easy task — Haiku overridden to cheaper budget model"}
+{"task_type": "extraction", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "description": "Easy task — Opus overridden to cheapest qualifying model"}
+{"task_type": "extraction", "requested_model": "claude-sonnet-4-20250514", "expected_behavior": "override", "description": "Easy task — Sonnet overridden to cheapest qualifying model"}
+{"task_type": "extraction", "requested_model": "claude-haiku-4-5-20251001", "expected_behavior": "override", "description": "Easy task — Haiku overridden to cheaper budget model"}
+{"task_type": "conversation", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "description": "Easy task — Opus overridden to cheapest qualifying model"}
+{"task_type": "conversation", "requested_model": "claude-sonnet-4-20250514", "expected_behavior": "override", "description": "Easy task — Sonnet overridden to cheapest qualifying model"}
+{"task_type": "conversation", "requested_model": "claude-haiku-4-5-20251001", "expected_behavior": "override", "description": "Easy task — Haiku overridden to cheaper budget model"}
+{"task_type": "conversation", "requested_model": "gpt-4o", "expected_behavior": "override", "description": "Easy task — GPT-4o overridden to cheapest qualifying model"}
+{"task_type": "tool_selection", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "description": "Easy task — Opus overridden to cheapest qualifying model"}
+{"task_type": "tool_selection", "requested_model": "claude-sonnet-4-20250514", "expected_behavior": "override", "description": "Easy task — Sonnet overridden to cheapest qualifying model"}
+{"task_type": "tool_selection", "requested_model": "claude-haiku-4-5-20251001", "expected_behavior": "override", "description": "Easy task — Haiku overridden to cheaper budget model"}
+{"task_type": "classification", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "has_tool_use": true, "description": "Easy task with tools — Opus overridden to cheapest tool-use model"}
+{"task_type": "code_generation", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "has_tool_use": true, "description": "Hard task with tools — Opus overridden to cheapest tool-use model above 0.70"}
+{"task_type": "code_generation", "requested_model": "gpt-4o", "expected_behavior": "passthrough", "has_tool_use": true, "description": "Hard task with tools — GPT-4o IS the cheapest qualifying tool-use model"}
+{"task_type": "conversation", "requested_model": "claude-opus-4-6-20250527", "expected_behavior": "override", "has_tool_use": true, "description": "Easy task with tools — Opus overridden to cheapest tool-use model"}
+{"task_type": "unknown", "requested_model": "claude-sonnet-4-20250514", "expected_behavior": "override", "description": "Unknown task type — catch-all rule routes to fallback model"}

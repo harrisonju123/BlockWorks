@@ -22,14 +22,19 @@ _SYSTEM_PROMPT = (
     "Given structural signals from an LLM request, determine the primary "
     "task the user is asking the model to perform.\n\n"
     "Possible task types:\n"
-    "- code_generation: writing, implementing, or refactoring code\n"
+    "- code_generation: writing or implementing new code\n"
     "- code_review: reviewing diffs, PRs, auditing code quality\n"
     "- classification: labeling, categorizing, or detecting sentiment\n"
     "- summarization: condensing or summarizing text\n"
     "- extraction: parsing or pulling structured data from text\n"
     "- reasoning: explaining, analyzing, or step-by-step thinking\n"
     "- conversation: casual chat or dialogue\n"
-    "- tool_selection: choosing or invoking tools/functions\n\n"
+    "- tool_selection: choosing or invoking tools/functions\n"
+    "- architecture: system design, planning architecture, high-level design\n"
+    "- debugging: investigating bugs, stack traces, root cause analysis\n"
+    "- refactoring: restructuring existing code without changing behavior\n"
+    "- documentation: writing docs, READMEs, API docs, docstrings\n"
+    "- testing: writing tests, test plans, test cases\n\n"
     "Respond with ONLY the task type name, nothing else."
 )
 
@@ -110,7 +115,14 @@ async def llm_classify(
     resp.raise_for_status()
     data = resp.json()
 
-    raw = data["choices"][0]["message"]["content"].strip()
+    choices = data.get("choices") or []
+    if not choices:
+        raise ValueError("LLM response has no choices")
+    message = choices[0].get("message") or {}
+    raw_content = message.get("content")
+    if not raw_content:
+        raise ValueError("LLM response has no message content")
+    raw = raw_content.strip()
     task_type, confidence = _parse_response(raw)
 
     return ClassificationResult(

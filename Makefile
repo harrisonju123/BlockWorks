@@ -51,6 +51,10 @@ fmt:
 typecheck:
 	mypy src/blockthrough/
 
+# Run eval accuracy gates (classifier + routing simulation)
+test-eval:
+	pytest tests/unit/classifier/test_evaluator.py tests/unit/eval/ -v
+
 # Full CI check
 ci: lint typecheck test
 

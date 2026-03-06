@@ -56,3 +56,6 @@ DEMO_SCRIPT.md
 
 # pnpm store
 .pnpm-store/
+
+# Project tracker (local only)
+.tracker/

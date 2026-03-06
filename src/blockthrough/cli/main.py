@@ -2,7 +2,7 @@
 
 import typer
 
-from blockthrough.cli.commands.evaluate import evaluate
+from blockthrough.cli.commands.evaluate import evaluate, evaluate_app
 from blockthrough.cli.commands.stats import stats
 from blockthrough.cli.commands.waste_report import waste_report
 
@@ -15,6 +15,7 @@ app = typer.Typer(
 app.command()(stats)
 app.command()(evaluate)
 app.command(name="waste-report")(waste_report)
+app.add_typer(evaluate_app, name="eval")
 
 
 if __name__ == "__main__":

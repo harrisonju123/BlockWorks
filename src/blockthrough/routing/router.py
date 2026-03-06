@@ -14,6 +14,7 @@ from typing import Any
 
 from blockthrough.benchmarking.types import FitnessEntry
 from blockthrough.models import MODEL_CATALOG, ModelInfo
+from blockthrough.routing.policy import _HARD_TASKS
 from blockthrough.routing.types import (
     QUALITY_FLOOR,
     RoutingDecision,
@@ -23,7 +24,10 @@ from blockthrough.routing.types import (
 )
 from blockthrough.types import TaskType
 
-_UNKNOWN_MODEL_INFO = ModelInfo(tier=3, cost_per_1k_input=0, cost_per_1k_output=0)
+# Pre-compute string values for fast membership check in resolve()
+_HARD_TASK_VALUES: frozenset[str] = frozenset(t.value for t in _HARD_TASKS)
+
+_UNKNOWN_MODEL_INFO = ModelInfo(tier=3, cost_per_1k_input=0, cost_per_1k_output=0, supports_tool_use=False)
 
 # Synthetic fitness defaults by model tier — used when no benchmark data exists
 _TIER_DEFAULTS: dict[int, dict[str, float]] = {
@@ -111,23 +115,35 @@ class FitnessCache:
         self._ttl_s = ttl_s
         self._entries: list[FitnessEntry] = []
         self._last_updated: float = 0.0
+        self._force_stale: bool = False
         # Pre-built index: task_type -> list of entries, sorted by quality desc
         self._by_task_type: dict[str, list[FitnessEntry]] = {}
 
     def update(self, entries: list[FitnessEntry]) -> None:
-        """Replace the cached fitness matrix and rebuild the index."""
-        self._entries = list(entries)
+        """Replace the cached fitness matrix and rebuild the index.
+
+        Builds the new index into local vars before swapping references so
+        a concurrent reader never sees a half-built (empty) index.
+        """
+        new_entries = list(entries)
+        new_index: dict[str, list[FitnessEntry]] = {}
+        for entry in new_entries:
+            new_index.setdefault(entry.task_type, []).append(entry)
+        for task_type in new_index:
+            new_index[task_type].sort(key=lambda e: e.avg_quality, reverse=True)
+        # Single-assignment swap — safe under asyncio's single-threaded event loop
+        self._entries = new_entries
+        self._by_task_type = new_index
         self._last_updated = time.monotonic()
-        self._by_task_type = {}
-        for entry in self._entries:
-            self._by_task_type.setdefault(entry.task_type, []).append(entry)
-        # Pre-sort each task type's entries by quality descending for fast filtering
-        for task_type in self._by_task_type:
-            self._by_task_type[task_type].sort(key=lambda e: e.avg_quality, reverse=True)
+        self._force_stale = False
+
+    def mark_stale(self) -> None:
+        """Signal that new benchmark data is available, triggering an early refresh."""
+        self._force_stale = True
 
     @property
     def is_stale(self) -> bool:
-        if self._last_updated == 0.0:
+        if self._force_stale or self._last_updated == 0.0:
             return True
         return (time.monotonic() - self._last_updated) > self._ttl_s
 
@@ -230,6 +246,25 @@ def resolve(
             reason=f"no matching rule for task_type={task_type}",
             was_overridden=False,
             policy_rule_id=None,
+        )
+
+    # Tier-1 preservation: when the requested model is frontier-class and the
+    # task is hard, switch to quality-first selection so BEST_VALUE's cost bias
+    # doesn't always downgrade Opus to Sonnet.
+    requested_info = MODEL_CATALOG.get(requested_model)
+    if (
+        requested_info is not None
+        and requested_info.tier == 1
+        and not rule.is_catch_all
+        and task_type in _HARD_TASK_VALUES
+    ):
+        rule = RoutingRule(
+            task_type=rule.task_type,
+            criteria=SelectionCriteria.HIGHEST_QUALITY_UNDER_COST,
+            min_quality=max(rule.min_quality, 0.85),
+            max_cost_per_1k=None,
+            max_latency_ms=rule.max_latency_ms,
+            fallback=rule.fallback,
         )
 
     # Empty fitness matrix -- fall through to fallback

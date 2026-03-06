@@ -209,6 +209,116 @@ _RUBRICS: dict[TaskType, Rubric] = {
             ),
         ],
     ),
+    TaskType.ARCHITECTURE: Rubric(
+        task_type=TaskType.ARCHITECTURE,
+        version=RUBRIC_VERSION,
+        criteria=[
+            RubricCriterion(
+                name="design_quality",
+                weight=0.5,
+                prompt=(
+                    "Does the architecture address scalability, separation of concerns, "
+                    "and appropriate technology choices? Score 0-1."
+                ),
+            ),
+            RubricCriterion(
+                name="completeness",
+                weight=0.5,
+                prompt=(
+                    "Does the design cover all major components, data flow, and failure modes? "
+                    "Score 0-1."
+                ),
+            ),
+        ],
+    ),
+    TaskType.DEBUGGING: Rubric(
+        task_type=TaskType.DEBUGGING,
+        version=RUBRIC_VERSION,
+        criteria=[
+            RubricCriterion(
+                name="root_cause",
+                weight=0.6,
+                prompt=(
+                    "Did the model correctly identify the root cause of the bug? "
+                    "Score 1.0 for correct, 0.5 for partial, 0.0 for wrong."
+                ),
+            ),
+            RubricCriterion(
+                name="fix_quality",
+                weight=0.4,
+                prompt=(
+                    "Is the proposed fix correct and does it avoid introducing new bugs? "
+                    "Score 0-1."
+                ),
+            ),
+        ],
+    ),
+    TaskType.REFACTORING: Rubric(
+        task_type=TaskType.REFACTORING,
+        version=RUBRIC_VERSION,
+        criteria=[
+            RubricCriterion(
+                name="behavior_preservation",
+                weight=0.5,
+                prompt=(
+                    "Does the refactored code preserve the original behavior? "
+                    "Score 1.0 for identical behavior, 0.0 for broken."
+                ),
+            ),
+            RubricCriterion(
+                name="improvement",
+                weight=0.5,
+                prompt=(
+                    "Is the code measurably cleaner, more modular, or more readable? "
+                    "Score 0-1."
+                ),
+            ),
+        ],
+    ),
+    TaskType.DOCUMENTATION: Rubric(
+        task_type=TaskType.DOCUMENTATION,
+        version=RUBRIC_VERSION,
+        criteria=[
+            RubricCriterion(
+                name="clarity",
+                weight=0.5,
+                prompt=(
+                    "Is the documentation clear, well-structured, and easy to follow? "
+                    "Score 0-1."
+                ),
+            ),
+            RubricCriterion(
+                name="completeness",
+                weight=0.5,
+                prompt=(
+                    "Does it cover all relevant aspects (usage, parameters, examples, edge cases)? "
+                    "Score 0-1."
+                ),
+            ),
+        ],
+    ),
+    TaskType.TESTING: Rubric(
+        task_type=TaskType.TESTING,
+        version=RUBRIC_VERSION,
+        criteria=[
+            RubricCriterion(
+                name="coverage",
+                weight=0.5,
+                prompt=(
+                    "Do the tests cover the key paths including edge cases and error conditions? "
+                    "Score 0-1."
+                ),
+            ),
+            RubricCriterion(
+                name="correctness",
+                weight=0.5,
+                prompt=(
+                    "Are the test assertions correct and the test setup realistic? "
+                    "Score 0-1."
+                ),
+            ),
+        ],
+    ),
 }
 
 

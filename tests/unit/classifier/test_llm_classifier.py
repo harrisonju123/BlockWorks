@@ -203,3 +203,48 @@ class TestLlmClassify:
         inp = _make_input()
         with pytest.raises(asyncio.TimeoutError):
             await llm_classify(inp, timeout_s=0.01, client=mock_client)
+
+    @pytest.mark.asyncio
+    async def test_empty_choices_raises_valueerror(self):
+        """H3: Empty choices array → ValueError so caller falls back to rules."""
+        resp = httpx.Response(
+            status_code=200,
+            json={"choices": []},
+            request=httpx.Request("POST", "http://test/v1/chat/completions"),
+        )
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post.return_value = resp
+
+        inp = _make_input()
+        with pytest.raises(ValueError, match="no choices"):
+            await llm_classify(inp, client=mock_client)
+
+    @pytest.mark.asyncio
+    async def test_missing_message_key_raises_valueerror(self):
+        """H3: choices[0] without 'message' → ValueError."""
+        resp = httpx.Response(
+            status_code=200,
+            json={"choices": [{}]},
+            request=httpx.Request("POST", "http://test/v1/chat/completions"),
+        )
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post.return_value = resp
+
+        inp = _make_input()
+        with pytest.raises(ValueError, match="no message content"):
+            await llm_classify(inp, client=mock_client)
+
+    @pytest.mark.asyncio
+    async def test_null_content_raises_valueerror(self):
+        """H3: message.content is None → ValueError."""
+        resp = httpx.Response(
+            status_code=200,
+            json={"choices": [{"message": {"content": None}}]},
+            request=httpx.Request("POST", "http://test/v1/chat/completions"),
+        )
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post.return_value = resp
+
+        inp = _make_input()
+        with pytest.raises(ValueError, match="no message content"):
+            await llm_classify(inp, client=mock_client)

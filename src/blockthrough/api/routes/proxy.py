@@ -51,6 +51,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Drop counters — exposed via get_queue_drop_counts() for monitoring
+_event_queue_drops: int = 0
+_decision_queue_drops: int = 0
+_benchmark_queue_drops: int = 0
+
+
+def get_queue_drop_counts() -> dict[str, int]:
+    """Return current queue drop counts for monitoring/health checks."""
+    return {
+        "event_queue_drops": _event_queue_drops,
+        "decision_queue_drops": _decision_queue_drops,
+        "benchmark_queue_drops": _benchmark_queue_drops,
+    }
+
+
 # Headers that must not be forwarded between hops (RFC 2616 §13.5.1)
 _HOP_BY_HOP = frozenset({
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -122,10 +137,12 @@ def _enqueue(
     system_prompt: str | list | None = None,
 ) -> None:
     """Enqueue event for persistence, and optionally for benchmark sampling."""
+    global _event_queue_drops, _benchmark_queue_drops
     try:
         queue.put_nowait(event)
     except asyncio.QueueFull:
-        logger.warning("Proxy event queue full — dropping event %s", event.id)
+        _event_queue_drops += 1
+        logger.warning("Proxy event queue full — dropping event %s (total drops: %d)", event.id, _event_queue_drops)
 
     # Mirror to benchmark worker when enabled
     if request is not None and messages is not None:
@@ -136,7 +153,8 @@ def _enqueue(
                 try:
                     bench_queue.put_nowait((event, messages, completion, system_prompt))
                 except asyncio.QueueFull:
-                    logger.warning("Benchmark queue full — skipping event %s", event.id)
+                    _benchmark_queue_drops += 1
+                    logger.warning("Benchmark queue full — skipping event %s (total drops: %d)", event.id, _benchmark_queue_drops)
 
 
 def _request_uses_tools(body: dict) -> bool:
@@ -210,6 +228,7 @@ async def _maybe_route(
     The classification result is returned so callers can reuse it
     instead of re-running the classifier after the upstream response.
     """
+    global _decision_queue_drops
     # X-Force-Model header bypasses routing entirely
     forced = request.headers.get("x-force-model")
     if forced:
@@ -234,7 +253,10 @@ async def _maybe_route(
         return model, None, (task_type, confidence, sys_hash)
 
     # Gate on classifier confidence — only route when classification is trustworthy
-    confidence_threshold = getattr(request.app.state, "routing_confidence_threshold", 0.7)
+    confidence_threshold = getattr(
+        request.app.state, "routing_confidence_threshold",
+        get_config().classifier_confidence_threshold,
+    )
     if confidence is None or confidence < confidence_threshold:
         decision = RoutingDecision(
             selected_model=model,
@@ -258,7 +280,8 @@ async def _maybe_route(
             try:
                 decision_queue.put_nowait(record)
             except asyncio.QueueFull:
-                logger.warning("Decision queue full — dropping routing decision")
+                _decision_queue_drops += 1
+                logger.warning("Decision queue full — dropping routing decision (total drops: %d)", _decision_queue_drops)
         return model, decision, (task_type, confidence, sys_hash)
 
     decision = resolve(
@@ -289,7 +312,8 @@ async def _maybe_route(
         try:
             decision_queue.put_nowait(record)
         except asyncio.QueueFull:
-            logger.warning("Decision queue full — dropping routing decision")
+            _decision_queue_drops += 1
+            logger.warning("Decision queue full — dropping routing decision (total drops: %d)", _decision_queue_drops)
 
     if decision.was_overridden:
         return decision.selected_model, decision, (task_type, confidence, sys_hash)
@@ -323,6 +347,15 @@ async def _classify_request(
             continue
         role = msg.get("role")
         content = msg.get("content", "")
+        # Normalize multi-block content lists (e.g. vision/multi-part messages)
+        # to a plain string so downstream string ops don't crash.
+        if isinstance(content, list):
+            content = " ".join(
+                b.get("text", "") for b in content
+                if isinstance(b, dict) and b.get("type") == "text"
+            )
+        if not isinstance(content, str):
+            content = ""
         if role == "system":
             if system_prompt_hash is None:
                 system_prompt_hash = hash_content(content)
@@ -335,7 +368,7 @@ async def _classify_request(
                     output_format_hint = "json"
                 elif "```" in content:
                     output_format_hint = "code"
-        elif role == "user" and isinstance(content, str):
+        elif role == "user":
             user_kw_set.update(extract_keywords(content))
             last_user_message = content
 
@@ -386,6 +419,22 @@ async def _classify_request(
 
     result = classify(inp)
     return result.task_type, result.confidence, system_prompt_hash
+
+
+# Type alias for the (task_type, confidence, sys_hash) tuple returned by classifiers
+_Classification = tuple[TaskType | None, float | None, str | None]
+_EMPTY_CLASSIFICATION: _Classification = (None, None, None)
+
+
+async def _resolve_classification(
+    pre: _Classification,
+    classify_fn: Callable[..., Any],
+    *args: Any,
+) -> _Classification:
+    """Return pre-routing classification if available, otherwise run the classifier."""
+    if pre[0] is not None:
+        return pre
+    return await classify_fn(*args)
 
 
 def _build_event(
@@ -648,8 +697,9 @@ async def proxy_chat_completions(request: Request) -> JSONResponse | StreamingRe
     mono_start = time.monotonic()
     model = body.get("model", "unknown")
 
-    # Routing: potentially override the model before forwarding
-    routed_model, _, _ = await _maybe_route(
+    # Routing: potentially override the model before forwarding.
+    # Capture classification result to avoid re-classifying in the handler.
+    routed_model, _, pre_classification = await _maybe_route(
         request, body, model, _classify_request,
         has_tool_use=_request_uses_tools(body),
     )
@@ -669,10 +719,12 @@ async def proxy_chat_completions(request: Request) -> JSONResponse | StreamingRe
         return await _handle_streaming(
             client, body, headers, request,
             trace_id, framework, started_at, mono_start, model,
+            pre_classification=pre_classification,
         )
     return await _handle_non_streaming(
         client, body, headers, request,
         trace_id, framework, started_at, mono_start, model,
+        pre_classification=pre_classification,
     )
 
 
@@ -690,6 +742,8 @@ async def _handle_non_streaming(
     started_at: datetime,
     mono_start: float,
     model: str,
+    *,
+    pre_classification: tuple[TaskType | None, float | None, str | None] = (None, None, None),
 ) -> JSONResponse:
     resp = await client.post("/v1/chat/completions", json=body, headers=headers)
     latency_ms = (time.monotonic() - mono_start) * 1000
@@ -721,8 +775,10 @@ async def _handle_non_streaming(
             ))
         break  # first choice only
 
-    # Classify + get system_prompt_hash in one pass
-    task_type, task_confidence, sys_hash = await _classify_request(request, body, prompt_tokens, completion_tokens)
+    # Reuse routing classification if available; only re-classify when routing was skipped
+    task_type, task_confidence, sys_hash = await _resolve_classification(
+        pre_classification, _classify_request, request, body, prompt_tokens, completion_tokens,
+    )
 
     # Error info
     error_type = None
@@ -777,6 +833,8 @@ async def _handle_streaming(
     started_at: datetime,
     mono_start: float,
     model: str,
+    *,
+    pre_classification: tuple[TaskType | None, float | None, str | None] = (None, None, None),
 ) -> StreamingResponse:
     # Inject stream_options so final chunk contains token usage
     body.setdefault("stream_options", {})["include_usage"] = True
@@ -819,8 +877,8 @@ async def _handle_streaming(
             completion_tokens = acc.completion_tokens
             tool_calls = acc.tool_call_records
 
-            task_type, task_confidence, sys_hash = await _classify_request(
-                request, body, prompt_tokens, completion_tokens,
+            task_type, task_confidence, sys_hash = await _resolve_classification(
+                pre_classification, _classify_request, request, body, prompt_tokens, completion_tokens,
             )
 
             status = EventStatus.FAILURE if stream_error else EventStatus.SUCCESS
@@ -913,7 +971,7 @@ async def proxy_messages(request: Request) -> JSONResponse | StreamingResponse:
     upstream_models: set[str] | None = getattr(request.app.state, "upstream_models", None)
     if upstream_models is None:
         upstream_models = get_anthropic_models()
-    routed_model, _, _ = await _maybe_route(
+    routed_model, _, pre_classification = await _maybe_route(
         request, body, model, _classify_anthropic_request,
         has_tool_use=_request_uses_tools_anthropic(body),
         allowed_models=upstream_models,
@@ -942,20 +1000,24 @@ async def proxy_messages(request: Request) -> JSONResponse | StreamingResponse:
             return await _handle_messages_via_openai_streaming(
                 openai_client, body, headers, request,
                 trace_id, framework, started_at, mono_start, model,
+                pre_classification=pre_classification,
             )
         return await _handle_messages_via_openai(
             openai_client, body, headers, request,
             trace_id, framework, started_at, mono_start, model,
+            pre_classification=pre_classification,
         )
 
     if body.get("stream", False):
         return await _handle_messages_streaming(
             client, body, headers, query_string, request,
             trace_id, framework, started_at, mono_start, model,
+            pre_classification=pre_classification,
         )
     return await _handle_messages_non_streaming(
         client, body, headers, query_string, request,
         trace_id, framework, started_at, mono_start, model,
+        pre_classification=pre_classification,
     )
 
 
@@ -970,6 +1032,8 @@ async def _handle_messages_non_streaming(
     started_at: datetime,
     mono_start: float,
     model: str,
+    *,
+    pre_classification: tuple[TaskType | None, float | None, str | None] = (None, None, None),
 ) -> JSONResponse:
     path = f"/v1/messages?{query_string}" if query_string else "/v1/messages"
     resp = await client.post(path, json=body, headers=headers)
@@ -1007,8 +1071,8 @@ async def _handle_messages_non_streaming(
                 args_hash=hash_content(json.dumps(block.get("input", {}))),
             ))
 
-    task_type, task_confidence, sys_hash = await _classify_anthropic_request(
-        request, body, prompt_tokens, completion_tokens,
+    task_type, task_confidence, sys_hash = await _resolve_classification(
+        pre_classification, _classify_anthropic_request, request, body, prompt_tokens, completion_tokens,
     )
 
     error_type = None
@@ -1066,6 +1130,8 @@ async def _handle_messages_streaming(
     started_at: datetime,
     mono_start: float,
     model: str,
+    *,
+    pre_classification: tuple[TaskType | None, float | None, str | None] = (None, None, None),
 ) -> StreamingResponse:
     path = f"/v1/messages?{query_string}" if query_string else "/v1/messages"
     upstream_req = client.build_request("POST", path, json=body, headers=headers)
@@ -1100,8 +1166,8 @@ async def _handle_messages_streaming(
             resolved_model = acc.model or model
             tool_calls = acc.tool_call_records
 
-            task_type, task_confidence, sys_hash = await _classify_anthropic_request(
-                request, body, acc.prompt_tokens, acc.completion_tokens,
+            task_type, task_confidence, sys_hash = await _resolve_classification(
+                pre_classification, _classify_anthropic_request, request, body, acc.prompt_tokens, acc.completion_tokens,
             )
 
             status = EventStatus.FAILURE if stream_error else EventStatus.SUCCESS
@@ -1166,6 +1232,8 @@ async def _handle_messages_via_openai(
     started_at: datetime,
     mono_start: float,
     model: str,
+    *,
+    pre_classification: tuple[TaskType | None, float | None, str | None] = (None, None, None),
 ) -> JSONResponse:
     openai_body = anthropic_to_openai_request(anthropic_body)
     resp = await client.post("/v1/chat/completions", json=openai_body, headers=headers)
@@ -1210,8 +1278,8 @@ async def _handle_messages_via_openai(
             ))
         break
 
-    task_type, task_confidence, sys_hash = await _classify_anthropic_request(
-        request, anthropic_body, prompt_tokens, completion_tokens,
+    task_type, task_confidence, sys_hash = await _resolve_classification(
+        pre_classification, _classify_anthropic_request, request, anthropic_body, prompt_tokens, completion_tokens,
     )
 
     error_type = None
@@ -1257,6 +1325,8 @@ async def _handle_messages_via_openai_streaming(
     started_at: datetime,
     mono_start: float,
     model: str,
+    *,
+    pre_classification: tuple[TaskType | None, float | None, str | None] = (None, None, None),
 ) -> StreamingResponse:
     openai_body = anthropic_to_openai_request(anthropic_body)
     openai_body["stream"] = True
@@ -1337,8 +1407,8 @@ async def _handle_messages_via_openai_streaming(
 
             latency_ms = (time.monotonic() - mono_start) * 1000
             resolved_model = acc.model or model
-            task_type, task_confidence, sys_hash = await _classify_anthropic_request(
-                request, anthropic_body, acc.prompt_tokens, acc.completion_tokens,
+            task_type, task_confidence, sys_hash = await _resolve_classification(
+                pre_classification, _classify_anthropic_request, request, anthropic_body, acc.prompt_tokens, acc.completion_tokens,
             )
 
             status = EventStatus.FAILURE if stream_error else EventStatus.SUCCESS

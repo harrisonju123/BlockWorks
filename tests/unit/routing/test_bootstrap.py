@@ -302,8 +302,8 @@ class TestBootstrapWithSyntheticFitness:
         assert decision.selected_model != "claude-haiku-4-5-20251001"
         assert decision.selected_model != "gpt-4o-mini"
 
-    def test_complex_task_routes_appropriately(self) -> None:
-        """Complex task with opus request should route away from frontier."""
+    def test_complex_task_preserves_tier1(self) -> None:
+        """Hard task with Opus request → tier-1 preservation keeps Opus."""
         cache = FitnessCache()
         cache.update(generate_synthetic_fitness())
         policy = bootstrap_policy(fitness_cache=cache)
@@ -314,8 +314,23 @@ class TestBootstrapWithSyntheticFitness:
             fitness_cache=cache,
             policy=policy,
         )
+        # Tier-1 preservation switches to quality-first, Opus wins
+        assert decision.selected_model == "claude-opus-4-20250514"
+        assert decision.was_overridden is False
+
+    def test_easy_task_downgrades_tier1(self) -> None:
+        """Easy task with Opus request → normal BEST_VALUE downgrades."""
+        cache = FitnessCache()
+        cache.update(generate_synthetic_fitness())
+        policy = bootstrap_policy(fitness_cache=cache)
+
+        decision = resolve(
+            task_type="classification",
+            requested_model="claude-opus-4-20250514",
+            fitness_cache=cache,
+            policy=policy,
+        )
         assert decision.was_overridden
-        # Should pick a cost-effective model, not opus
         assert decision.selected_model != "claude-opus-4-20250514"
 
     def test_catch_all_handles_unknown_task(self) -> None:

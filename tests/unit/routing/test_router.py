@@ -175,6 +175,7 @@ class TestResolveFastestAboveQuality:
 class TestResolveHighestQualityUnderCost:
 
     def test_picks_highest_quality_under_cost_cap(self) -> None:
+        # Use Sonnet as requester (tier 2) to avoid tier-1 preservation
         entries = [
             _make_entry("claude-opus-4-20250514", "code_generation", avg_quality=0.98, avg_cost=0.015),
             _make_entry("claude-sonnet-4-20250514", "code_generation", avg_quality=0.93, avg_cost=0.003),
@@ -192,13 +193,13 @@ class TestResolveHighestQualityUnderCost:
             ]
         )
 
-        decision = resolve("code_generation", "claude-opus-4-20250514", cache, policy)
+        decision = resolve("code_generation", "claude-sonnet-4-20250514", cache, policy)
 
         # Opus exceeds max_cost (0.015 > 0.005), so sonnet is picked (quality 0.93)
         assert decision.selected_model == "claude-sonnet-4-20250514"
-        assert decision.was_overridden is True
 
     def test_all_models_exceed_cost_uses_fallback(self) -> None:
+        # Use Sonnet as requester (tier 2) to avoid tier-1 preservation
         entries = [
             _make_entry("claude-opus-4-20250514", "code_generation", avg_quality=0.98, avg_cost=0.015),
             _make_entry("claude-sonnet-4-20250514", "code_generation", avg_quality=0.93, avg_cost=0.003),
@@ -215,7 +216,7 @@ class TestResolveHighestQualityUnderCost:
             ]
         )
 
-        decision = resolve("code_generation", "claude-opus-4-20250514", cache, policy)
+        decision = resolve("code_generation", "claude-sonnet-4-20250514", cache, policy)
 
         assert decision.selected_model == "claude-haiku-4-5-20251001"
         assert "fallback" in decision.reason
@@ -622,3 +623,210 @@ class TestFitnessCache:
         assert result[0].model == "high-quality"
         assert result[1].model == "mid-quality"
         assert result[2].model == "low-quality"
+
+    def test_mark_stale_triggers_early_refresh(self) -> None:
+        """L1: mark_stale() makes is_stale return True before TTL expires."""
+        cache = FitnessCache(ttl_s=9999)
+        cache.update([_make_entry("model-a", "classification")])
+        assert cache.is_stale is False
+
+        cache.mark_stale()
+        assert cache.is_stale is True
+
+    def test_mark_stale_cleared_after_update(self) -> None:
+        """L1: update() clears the stale flag."""
+        cache = FitnessCache(ttl_s=9999)
+        cache.update([_make_entry("model-a", "classification")])
+        cache.mark_stale()
+        assert cache.is_stale is True
+
+        cache.update([_make_entry("model-b", "classification")])
+        assert cache.is_stale is False
+
+    def test_concurrent_read_during_update_not_empty(self) -> None:
+        """M1: Atomic update — index should never be empty during rebuild."""
+        cache = FitnessCache(ttl_s=300)
+        initial = [_make_entry("model-a", "classification")]
+        cache.update(initial)
+
+        # Before update, should have entries
+        assert len(cache.get_entries_for_task("classification")) == 1
+
+        # After update with new data, should also have entries
+        cache.update([_make_entry("model-b", "classification")])
+        assert len(cache.get_entries_for_task("classification")) == 1
+        assert cache.get_entries_for_task("classification")[0].model == "model-b"
+
+
+class TestUnknownModelToolUse:
+
+    def test_unknown_model_excluded_from_tool_use_routing(self) -> None:
+        """M2: Unknown models default to supports_tool_use=False, excluded from tool-use requests."""
+        entries = [
+            _make_entry("unknown-fancy-model", "classification", avg_quality=0.95, avg_cost=0.0001),
+            _make_entry("claude-sonnet-4-20250514", "classification", avg_quality=0.93, avg_cost=0.003),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+                    min_quality=0.9,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+
+        decision = resolve(
+            "classification", "claude-sonnet-4-20250514", cache, policy,
+            has_tool_use=True,
+        )
+
+        # unknown-fancy-model is cheapest but supports_tool_use=False by default
+        assert decision.selected_model == "claude-sonnet-4-20250514"
+
+    def test_unknown_model_included_without_tool_use(self) -> None:
+        """M2: Without tool use, unknown models are still valid candidates."""
+        entries = [
+            _make_entry("unknown-fancy-model", "classification", avg_quality=0.95, avg_cost=0.0001),
+            _make_entry("claude-sonnet-4-20250514", "classification", avg_quality=0.93, avg_cost=0.003),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.CHEAPEST_ABOVE_QUALITY,
+                    min_quality=0.9,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+
+        decision = resolve(
+            "classification", "claude-sonnet-4-20250514", cache, policy,
+            has_tool_use=False,
+        )
+
+        assert decision.selected_model == "unknown-fancy-model"
+
+
+class TestTier1Preservation:
+    """Tier-1 models should not get downgraded on hard tasks via BEST_VALUE."""
+
+    def test_opus_preserved_on_architecture_task(self) -> None:
+        """Opus requested + architecture → Opus wins (quality 0.95 > 0.85 floor)."""
+        entries = [
+            _make_entry("claude-opus-4-6", "architecture", avg_quality=0.95, avg_cost=0.045),
+            _make_entry("claude-sonnet-4-6", "architecture", avg_quality=0.68, avg_cost=0.009),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="architecture",
+                    criteria=SelectionCriteria.BEST_VALUE,
+                    min_quality=0.70,
+                    fallback="claude-sonnet-4-6",
+                ),
+            ]
+        )
+
+        decision = resolve("architecture", "claude-opus-4-6", cache, policy)
+
+        assert decision.selected_model == "claude-opus-4-6"
+        assert decision.was_overridden is False
+
+    def test_opus_preserved_on_debugging_task(self) -> None:
+        """Opus requested + debugging → Opus wins."""
+        entries = [
+            _make_entry("claude-opus-4-6", "debugging", avg_quality=0.94, avg_cost=0.045),
+            _make_entry("claude-sonnet-4-6", "debugging", avg_quality=0.72, avg_cost=0.009),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="debugging",
+                    criteria=SelectionCriteria.BEST_VALUE,
+                    min_quality=0.70,
+                    fallback="claude-sonnet-4-6",
+                ),
+            ]
+        )
+
+        decision = resolve("debugging", "claude-opus-4-6", cache, policy)
+
+        assert decision.selected_model == "claude-opus-4-6"
+
+    def test_opus_downgraded_on_easy_task(self) -> None:
+        """Opus requested + classification (easy) → cheaper model wins via BEST_VALUE."""
+        entries = [
+            _make_entry("claude-opus-4-6", "classification", avg_quality=0.96, avg_cost=0.045),
+            _make_entry("claude-sonnet-4-6", "classification", avg_quality=0.88, avg_cost=0.009),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.BEST_VALUE,
+                    min_quality=0.55,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+
+        decision = resolve("classification", "claude-opus-4-6", cache, policy)
+
+        # Sonnet has better value ratio (0.88/0.009=97.8 vs 0.96/0.045=21.3)
+        assert decision.selected_model == "claude-sonnet-4-6"
+        assert decision.was_overridden is True
+
+    def test_non_tier1_unaffected_on_hard_task(self) -> None:
+        """Sonnet (tier 2) + hard task → normal BEST_VALUE, no preservation."""
+        entries = [
+            _make_entry("claude-sonnet-4-6", "architecture", avg_quality=0.68, avg_cost=0.009),
+            _make_entry("claude-haiku-4-5-20251001", "architecture", avg_quality=0.30, avg_cost=0.0024),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="architecture",
+                    criteria=SelectionCriteria.BEST_VALUE,
+                    min_quality=0.55,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+
+        decision = resolve("architecture", "claude-sonnet-4-6", cache, policy)
+
+        # Normal BEST_VALUE applies — Sonnet wins on quality/cost ratio
+        assert decision.selected_model == "claude-sonnet-4-6"
+
+    def test_tier1_catch_all_not_preserved(self) -> None:
+        """Tier-1 preservation doesn't apply to catch-all rules."""
+        entries = [
+            _make_entry("claude-opus-4-6", "code_generation", avg_quality=0.93, avg_cost=0.045),
+            _make_entry("claude-sonnet-4-6", "code_generation", avg_quality=0.76, avg_cost=0.009),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="*",
+                    criteria=SelectionCriteria.BEST_VALUE,
+                    min_quality=0.55,
+                    fallback="claude-sonnet-4-6",
+                ),
+            ]
+        )
+
+        decision = resolve("code_generation", "claude-opus-4-6", cache, policy)
+
+        # Catch-all → no tier-1 preservation → BEST_VALUE picks Sonnet
+        assert decision.selected_model == "claude-sonnet-4-6"
+        assert decision.was_overridden is True

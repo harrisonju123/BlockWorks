@@ -54,7 +54,12 @@ async def _refresh_fitness_cache(app: FastAPI, interval_s: int) -> None:
     """
     while True:
         try:
-            await asyncio.sleep(interval_s)
+            # Wake early when mark_stale() was called (e.g. after benchmark flush)
+            cache_ref: FitnessCache = app.state.fitness_cache
+            for _ in range(interval_s):
+                if cache_ref.is_stale:
+                    break
+                await asyncio.sleep(1)
             from blockthrough.api.deps import get_async_session
             cfg = get_config()
             async with get_async_session() as session:
@@ -67,6 +72,8 @@ async def _refresh_fitness_cache(app: FastAPI, interval_s: int) -> None:
             # cache key includes fitness timestamp so no manual clear needed
             policy = getattr(app.state, "routing_policy", None)
             if policy is not None and policy.version == 0:
+                # Safe: asyncio is single-threaded so this assignment can't
+                # race with a concurrent read in _maybe_route.
                 app.state.routing_policy = default_policy(fitness_cache=cache)
             logger.debug("FitnessCache refreshed: %d merged entries", len(merged))
 
@@ -254,6 +261,7 @@ async def lifespan(app: FastAPI):
             db_url=cfg.database_url,
             queue=bench_queue,
             config=bench_config,
+            fitness_cache=getattr(app.state, "fitness_cache", None),
         )
         benchmark_worker_task = asyncio.create_task(benchmark_worker.run())
         logger.info("Benchmarking enabled (sample_rate=%.2f)", cfg.benchmark_sample_rate)

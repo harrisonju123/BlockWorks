@@ -14,6 +14,8 @@ import logging
 import random
 import time
 import uuid
+from typing import TYPE_CHECKING
+
 import asyncpg
 import litellm
 
@@ -23,6 +25,9 @@ from blockthrough.benchmarking.types import BenchmarkConfig, BenchmarkResult
 from blockthrough.utils import utcnow
 from blockthrough.pipeline.base_worker import AsyncQueueWorker
 from blockthrough.types import LLMEvent, TaskType
+
+if TYPE_CHECKING:
+    from blockthrough.routing.router import FitnessCache
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +230,7 @@ class BenchmarkWorker(AsyncQueueWorker[_BenchmarkItem]):
         db_url: str,
         queue: asyncio.Queue[_BenchmarkItem],
         config: BenchmarkConfig,
+        fitness_cache: FitnessCache | None = None,
     ) -> None:
         super().__init__(
             db_url=db_url,
@@ -235,6 +241,7 @@ class BenchmarkWorker(AsyncQueueWorker[_BenchmarkItem]):
             pool_max=5,
         )
         self._config = config
+        self._fitness_cache = fitness_cache
 
     def _make_item_id(self, item: _BenchmarkItem) -> str:
         return str(item[0].id)
@@ -272,6 +279,8 @@ class BenchmarkWorker(AsyncQueueWorker[_BenchmarkItem]):
                     )
                     if results:
                         await self._write_results(pool, results)
+                        if self._fitness_cache is not None:
+                            self._fitness_cache.mark_stale()
                 except Exception:
                     logger.exception("BenchmarkWorker error processing event=%s", event.id)
 

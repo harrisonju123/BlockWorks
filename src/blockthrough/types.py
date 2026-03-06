@@ -34,6 +34,11 @@ class TaskType(str, enum.Enum):
     REASONING = "reasoning"
     CONVERSATION = "conversation"
     TOOL_SELECTION = "tool_selection"
+    ARCHITECTURE = "architecture"
+    DEBUGGING = "debugging"
+    REFACTORING = "refactoring"
+    DOCUMENTATION = "documentation"
+    TESTING = "testing"
     UNKNOWN = "unknown"
 
 

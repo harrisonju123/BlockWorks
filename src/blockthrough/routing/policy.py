@@ -114,6 +114,7 @@ def validate_policy(policy: RoutingPolicy) -> None:
 # Tasks where budget models are genuinely unreliable (scores 0.30-0.40)
 _HARD_TASKS: set[TaskType] = {
     TaskType.CODE_GENERATION, TaskType.CODE_REVIEW, TaskType.REASONING,
+    TaskType.ARCHITECTURE, TaskType.DEBUGGING, TaskType.REFACTORING,
 }
 
 

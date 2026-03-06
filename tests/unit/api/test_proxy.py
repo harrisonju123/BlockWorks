@@ -751,3 +751,127 @@ class TestConfidenceGate:
 
         assert model == "claude-opus-4-6"
         assert decision is None
+
+    @pytest.mark.asyncio
+    async def test_threshold_fallback_uses_config_not_magic_number(self):
+        """H2: Missing routing_confidence_threshold on app.state uses config default (0.4), not 0.7."""
+        request = MagicMock()
+        request.app.state.routing_enabled = True
+        request.app.state.fitness_cache = MagicMock()
+        request.app.state.routing_policy = MagicMock(version=1)
+        request.app.state.decision_queue = None
+        request.headers = {}
+        # Intentionally do NOT set routing_confidence_threshold
+        del request.app.state.routing_confidence_threshold
+
+        call_count = 0
+
+        async def classify_fn(req, body, pt, ct):
+            nonlocal call_count
+            call_count += 1
+            # Confidence 0.5: above 0.4 (config default) but below 0.7 (old magic number)
+            return TaskType.CODE_GENERATION, 0.5, "hash"
+
+        with pytest.MonkeyPatch.context() as mp:
+            routed = RoutingDecision(
+                selected_model="claude-haiku-4-5-20251001",
+                reason="cheapest",
+                was_overridden=True,
+                policy_rule_id=0,
+            )
+            mp.setattr("blockthrough.api.routes.proxy.resolve", lambda **kw: routed)
+            mp.setattr("blockthrough.api.routes.proxy.record_decision", lambda d: None)
+
+            model, decision, _ = await _maybe_route(
+                request,
+                {"messages": [{"role": "user", "content": "test"}]},
+                "claude-sonnet-4-20250514",
+                classify_fn,
+            )
+
+        # Should route (0.5 >= 0.4), not passthrough (as it would with 0.7 threshold)
+        assert model == "claude-haiku-4-5-20251001"
+        assert decision.was_overridden is True
+
+    @pytest.mark.asyncio
+    async def test_pre_classification_reused_not_reclassified(self):
+        """H1: Classification from routing is reused in event logging."""
+        request = _make_routing_request(confidence_threshold=0.4)
+        classify_call_count = 0
+
+        async def classify_fn(req, body, pt, ct):
+            nonlocal classify_call_count
+            classify_call_count += 1
+            return TaskType.CODE_GENERATION, 0.85, "hash_first"
+
+        with pytest.MonkeyPatch.context() as mp:
+            routed = RoutingDecision(
+                selected_model="claude-haiku-4-5-20251001",
+                reason="cheapest",
+                was_overridden=True,
+                policy_rule_id=0,
+            )
+            mp.setattr("blockthrough.api.routes.proxy.resolve", lambda **kw: routed)
+            mp.setattr("blockthrough.api.routes.proxy.record_decision", lambda d: None)
+
+            model, decision, pre_class = await _maybe_route(
+                request,
+                {"messages": [{"role": "user", "content": "write code"}]},
+                "claude-sonnet-4-20250514",
+                classify_fn,
+            )
+
+        assert classify_call_count == 1
+        assert pre_class == (TaskType.CODE_GENERATION, 0.85, "hash_first")
+
+
+# ---------------------------------------------------------------------------
+# List content normalization (H4)
+# ---------------------------------------------------------------------------
+
+class TestListContentNormalization:
+    def test_multi_block_user_content_no_crash(self, mock_app):
+        """H4: Multi-block content lists should not crash extract_keywords."""
+        client, app, queue = mock_app
+
+        upstream_body = {
+            "id": "chatcmpl-multi",
+            "model": "gpt-4o",
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+        }
+        mock_resp = MagicMock(spec=httpx.Response)
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = upstream_body
+        app.state.http_client.post = AsyncMock(return_value=mock_resp)
+
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4o",
+                "messages": [
+                    {"role": "user", "content": [
+                        {"type": "text", "text": "Describe this image"},
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                    ]},
+                ],
+            },
+        )
+
+        assert resp.status_code == 200
+        event: LLMEvent = queue.get_nowait()
+        assert event.status.value == "success"
+
+
+# ---------------------------------------------------------------------------
+# Queue drop counters (M3)
+# ---------------------------------------------------------------------------
+
+class TestQueueDropCounters:
+    def test_get_queue_drop_counts_returns_dict(self):
+        from blockthrough.api.routes.proxy import get_queue_drop_counts
+        counts = get_queue_drop_counts()
+        assert "event_queue_drops" in counts
+        assert "decision_queue_drops" in counts
+        assert "benchmark_queue_drops" in counts
+        assert all(isinstance(v, int) for v in counts.values())

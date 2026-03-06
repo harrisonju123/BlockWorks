@@ -65,6 +65,8 @@ class EvalResult:
     incorrect_confidences: list[float] = field(default_factory=list)
     # Per-example results for threshold analysis
     predictions: list[tuple[bool, float]] = field(default_factory=list)
+    # Per-example labels: (predicted_label, expected_label, confidence)
+    detailed_predictions: list[tuple[str, str, float]] = field(default_factory=list)
 
     @property
     def accuracy(self) -> float:
@@ -169,6 +171,7 @@ def _accumulate(result: EvalResult, predicted: str, expected: str, confidence: f
         result.incorrect_confidences.append(confidence)
 
     result.predictions.append((is_correct, confidence))
+    result.detailed_predictions.append((predicted, expected, confidence))
     result.confusion[expected][predicted] += 1
 
     if predicted == expected:
@@ -313,3 +316,158 @@ def run(dataset_path: Path | None = None, model: str | None = None) -> EvalResul
 
     print_report(result, label=model or "rules")
     return result
+
+
+# --- Per-task accuracy targets, differentiated by routing impact ---
+
+# Regression guard floors — set ~10% below current rules-based accuracy.
+# These prevent silent degradation. LLM classifier aspirational targets are higher.
+PER_TASK_ACCURACY_TARGETS: dict[str, float] = {
+    "code_generation": 0.90,
+    "code_review": 0.40,
+    "reasoning": 0.40,
+    "classification": 0.75,
+    "extraction": 0.80,
+    "summarization": 0.70,
+    "conversation": 0.90,
+    "tool_selection": 0.85,
+    "architecture": 0.40,
+    "debugging": 0.40,
+    "refactoring": 0.40,
+    "documentation": 0.40,
+    "testing": 0.30,
+}
+
+
+# --- Classifier comparison and calibration ---
+
+@dataclass
+class DisagreementRow:
+    """One example where two classifiers disagree."""
+
+    index: int
+    expected: str
+    a_predicted: str
+    a_confidence: float
+    b_predicted: str
+    b_confidence: float
+    a_correct: bool
+    b_correct: bool
+
+
+@dataclass
+class ComparisonReport:
+    """Head-to-head comparison of two classifier runs."""
+
+    a_accuracy: float
+    b_accuracy: float
+    agreement_rate: float
+    disagreements: list[DisagreementRow]
+    per_task_winner: dict[str, str]  # task_type -> "a" | "b" | "tie"
+
+
+def compare(result_a: EvalResult, result_b: EvalResult) -> ComparisonReport:
+    """Compare two EvalResults using their detailed_predictions.
+
+    Both results must come from the same dataset (same length, same ordering).
+    """
+    if len(result_a.detailed_predictions) != len(result_b.detailed_predictions):
+        raise ValueError(
+            f"Results have different lengths: {len(result_a.detailed_predictions)} vs "
+            f"{len(result_b.detailed_predictions)}"
+        )
+
+    disagreements: list[DisagreementRow] = []
+    agreements = 0
+    # task_type -> (a_correct_count, b_correct_count)
+    per_task_scores: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+
+    for i, (a_pred, b_pred) in enumerate(
+        zip(result_a.detailed_predictions, result_b.detailed_predictions)
+    ):
+        a_label, a_expected, a_conf = a_pred
+        b_label, b_expected, b_conf = b_pred
+        a_ok = a_label == a_expected
+        b_ok = b_label == b_expected
+
+        if a_ok:
+            per_task_scores[a_expected][0] += 1
+        if b_ok:
+            per_task_scores[b_expected][1] += 1
+
+        if a_label == b_label:
+            agreements += 1
+        else:
+            disagreements.append(
+                DisagreementRow(
+                    index=i,
+                    expected=a_expected,
+                    a_predicted=a_label,
+                    a_confidence=a_conf,
+                    b_predicted=b_label,
+                    b_confidence=b_conf,
+                    a_correct=a_ok,
+                    b_correct=b_ok,
+                )
+            )
+
+    total = len(result_a.detailed_predictions)
+    per_task_winner: dict[str, str] = {}
+    for tt, (a_count, b_count) in per_task_scores.items():
+        if a_count > b_count:
+            per_task_winner[tt] = "a"
+        elif b_count > a_count:
+            per_task_winner[tt] = "b"
+        else:
+            per_task_winner[tt] = "tie"
+
+    return ComparisonReport(
+        a_accuracy=result_a.accuracy,
+        b_accuracy=result_b.accuracy,
+        agreement_rate=agreements / total if total > 0 else 0.0,
+        disagreements=disagreements,
+        per_task_winner=per_task_winner,
+    )
+
+
+@dataclass
+class CalibrationBucket:
+    """One bin of the confidence calibration curve."""
+
+    bin_start: float
+    bin_end: float
+    avg_confidence: float
+    accuracy: float
+    count: int
+
+
+def calibration_curve(result: EvalResult, n_buckets: int = 10) -> list[CalibrationBucket]:
+    """Bucket predictions by confidence, compute actual accuracy per bucket."""
+    if not result.detailed_predictions or n_buckets < 1:
+        return []
+
+    bin_width = 1.0 / n_buckets
+    # bucket_index -> (sum_confidence, correct_count, total_count)
+    buckets: dict[int, list[float | int]] = {}
+
+    for predicted, expected, confidence in result.detailed_predictions:
+        idx = min(int(confidence / bin_width), n_buckets - 1)
+        if idx not in buckets:
+            buckets[idx] = [0.0, 0, 0]
+        buckets[idx][0] += confidence
+        buckets[idx][1] += 1 if predicted == expected else 0
+        buckets[idx][2] += 1
+
+    out: list[CalibrationBucket] = []
+    for idx in sorted(buckets.keys()):
+        sum_conf, correct, total = buckets[idx]
+        out.append(
+            CalibrationBucket(
+                bin_start=round(idx * bin_width, 2),
+                bin_end=round((idx + 1) * bin_width, 2),
+                avg_confidence=sum_conf / total,
+                accuracy=correct / total,
+                count=int(total),
+            )
+        )
+    return out

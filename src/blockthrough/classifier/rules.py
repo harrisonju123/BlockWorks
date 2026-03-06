@@ -24,7 +24,7 @@ TASK_KEYWORDS: dict[TaskType, list[str]] = {
         "write code", "write a function", "write a class",
         "implement a", "implement the", "implement this",
         "generate code", "create a script", "code this",
-        "build a function", "build a class", "refactor this",
+        "build a function", "build a class",
         "write a program", "write a module",
     ],
     TaskType.CODE_REVIEW: [
@@ -45,7 +45,35 @@ TASK_KEYWORDS: dict[TaskType, list[str]] = {
     TaskType.TOOL_SELECTION: [
         "select tool", "pick tool", "choose function", "use tool",
     ],
+    TaskType.ARCHITECTURE: [
+        "architect", "design system", "system design", "plan the architecture",
+        "high level design", "implementation plan", "design decision",
+    ],
+    TaskType.DEBUGGING: [
+        "debug", "stack trace", "traceback", "fix bug", "root cause",
+        "why is this failing", "investigate", "diagnose",
+    ],
+    TaskType.REFACTORING: [
+        "refactor", "restructure", "clean up", "simplify this",
+        "extract method", "extract function", "decouple",
+    ],
+    TaskType.DOCUMENTATION: [
+        "write docs", "document this", "documentation", "readme",
+        "api docs", "docstring",
+    ],
+    TaskType.TESTING: [
+        "write test", "write tests", "add test", "unit test",
+        "integration test", "test case", "test plan",
+    ],
 }
+
+# Task types where system prompt keywords deserve double weight (0.30 vs 0.15).
+# These types are commonly signaled via system prompt keywords, but at 0.15 the
+# scores fall below the 0.30 conversation fallback threshold.
+_SYS_KEYWORD_BOOST_TYPES: frozenset[TaskType] = frozenset({
+    TaskType.CODE_REVIEW, TaskType.REASONING, TaskType.SUMMARIZATION,
+    TaskType.ARCHITECTURE, TaskType.DEBUGGING,
+})
 
 # Precompile word-boundary regexes for single-word keywords so the hot-path
 # classifier doesn't pay re.compile cost on every call.
@@ -125,12 +153,15 @@ def classify(task_input: ClassifierInput) -> ClassificationResult:
         scores[TaskType.REASONING] += 0.2
 
     # Signal: keyword matching from system prompt (low weight — system
-    # prompts for coding assistants are full of generic code terms)
+    # prompts for coding assistants are full of generic code terms).
+    # Boosted types get 0.30 per keyword because these are strong task
+    # signals that otherwise fall below the conversation fallback threshold.
     for task_type, keywords in TASK_KEYWORDS.items():
         matched = [kw for kw in keywords if kw in task_input.system_prompt_keywords]
         if matched:
+            weight = 0.30 if task_type in _SYS_KEYWORD_BOOST_TYPES else 0.15
             signals.append(f"keywords_{task_type.value}:{','.join(matched)}")
-            scores[task_type] += 0.15 * len(matched)
+            scores[task_type] += weight * len(matched)
 
     # Signal: keyword matching from user prompt (stronger — direct intent)
     for task_type, keywords in TASK_KEYWORDS.items():

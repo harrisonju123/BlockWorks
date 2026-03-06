@@ -13,6 +13,7 @@ from dataclasses import dataclass
 _VALID_TASK_TYPES: frozenset[str] = frozenset({
     "code_generation", "code_review", "classification", "summarization",
     "extraction", "reasoning", "conversation", "tool_selection",
+    "architecture", "debugging", "refactoring", "documentation", "testing",
 })
 
 
@@ -57,26 +58,36 @@ _OPUS_46_QUALITIES: tuple[tuple[str, float], ...] = (
     ("classification", 0.96), ("code_generation", 0.93), ("code_review", 0.91),
     ("conversation", 0.95), ("extraction", 0.94), ("reasoning", 0.93),
     ("summarization", 0.94), ("tool_selection", 0.92),
+    ("architecture", 0.95), ("debugging", 0.94), ("refactoring", 0.90),
+    ("documentation", 0.88), ("testing", 0.89),
 )
 _OPUS_45_QUALITIES: tuple[tuple[str, float], ...] = (
     ("classification", 0.94), ("code_generation", 0.90), ("code_review", 0.88),
     ("conversation", 0.93), ("extraction", 0.92), ("reasoning", 0.91),
     ("summarization", 0.92), ("tool_selection", 0.90),
+    ("architecture", 0.93), ("debugging", 0.92), ("refactoring", 0.88),
+    ("documentation", 0.86), ("testing", 0.87),
 )
 _SONNET_4_QUALITIES: tuple[tuple[str, float], ...] = (
     ("classification", 0.87), ("code_generation", 0.75), ("code_review", 0.70),
     ("conversation", 0.81), ("extraction", 0.85), ("reasoning", 0.72),
     ("summarization", 0.80), ("tool_selection", 0.77),
+    ("architecture", 0.68), ("debugging", 0.72), ("refactoring", 0.78),
+    ("documentation", 0.82), ("testing", 0.80),
 )
 _HAIKU_QUALITIES: tuple[tuple[str, float], ...] = (
     ("classification", 0.72), ("code_generation", 0.38), ("code_review", 0.35),
     ("conversation", 0.68), ("extraction", 0.73), ("reasoning", 0.40),
     ("summarization", 0.65), ("tool_selection", 0.58),
+    ("architecture", 0.30), ("debugging", 0.35), ("refactoring", 0.40),
+    ("documentation", 0.60), ("testing", 0.50),
 )
 _BUDGET_QUALITIES: tuple[tuple[str, float], ...] = (
     ("classification", 0.72), ("code_generation", 0.35), ("code_review", 0.32),
     ("conversation", 0.68), ("extraction", 0.73), ("reasoning", 0.40),
     ("summarization", 0.65), ("tool_selection", 0.58),
+    ("architecture", 0.28), ("debugging", 0.30), ("refactoring", 0.35),
+    ("documentation", 0.55), ("testing", 0.45),
 )
 
 MODEL_CATALOG: dict[str, ModelInfo] = {
@@ -133,6 +144,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.88), ("code_generation", 0.76), ("code_review", 0.72),
             ("conversation", 0.84), ("extraction", 0.85), ("reasoning", 0.73),
             ("summarization", 0.78), ("tool_selection", 0.75),
+            ("architecture", 0.70), ("debugging", 0.73), ("refactoring", 0.76),
+            ("documentation", 0.80), ("testing", 0.78),
         ),
     ),
     # ── Tier 2: Sonnet / strong mid-tier ──────────────────────────
@@ -145,6 +158,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.88), ("code_generation", 0.76), ("code_review", 0.72),
             ("conversation", 0.82), ("extraction", 0.87), ("reasoning", 0.74),
             ("summarization", 0.82), ("tool_selection", 0.75),
+            ("architecture", 0.68), ("debugging", 0.72), ("refactoring", 0.78),
+            ("documentation", 0.82), ("testing", 0.80),
         ),
     ),
     "claude-sonnet-4-5-20250929": ModelInfo(
@@ -170,6 +185,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.82), ("code_generation", 0.80), ("code_review", 0.76),
             ("conversation", 0.72), ("extraction", 0.78), ("reasoning", 0.77),
             ("summarization", 0.74), ("tool_selection", 0.80),
+            ("architecture", 0.70), ("debugging", 0.74), ("refactoring", 0.78),
+            ("documentation", 0.76), ("testing", 0.78),
         ),
     ),
     "gpt-4o": ModelInfo(
@@ -181,6 +198,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.87), ("code_generation", 0.73), ("code_review", 0.72),
             ("conversation", 0.81), ("extraction", 0.85), ("reasoning", 0.72),
             ("summarization", 0.82), ("tool_selection", 0.75),
+            ("architecture", 0.66), ("debugging", 0.70), ("refactoring", 0.74),
+            ("documentation", 0.80), ("testing", 0.76),
         ),
     ),
     "gpt-4-turbo": ModelInfo(
@@ -192,6 +211,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.85), ("code_generation", 0.72), ("code_review", 0.70),
             ("conversation", 0.80), ("extraction", 0.83), ("reasoning", 0.70),
             ("summarization", 0.78), ("tool_selection", 0.73),
+            ("architecture", 0.64), ("debugging", 0.68), ("refactoring", 0.72),
+            ("documentation", 0.78), ("testing", 0.74),
         ),
     ),
     "qwen.qwen3-vl-235b-a22b": ModelInfo(
@@ -204,6 +225,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.87), ("code_generation", 0.76), ("code_review", 0.74),
             ("conversation", 0.81), ("extraction", 0.85), ("reasoning", 0.72),
             ("summarization", 0.78), ("tool_selection", 0.77),
+            ("architecture", 0.68), ("debugging", 0.72), ("refactoring", 0.76),
+            ("documentation", 0.80), ("testing", 0.78),
         ),
     ),
     "qwen.qwen3-next-80b-a3b": ModelInfo(
@@ -223,6 +246,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.85), ("code_generation", 0.76), ("code_review", 0.72),
             ("conversation", 0.81), ("extraction", 0.84), ("reasoning", 0.74),
             ("summarization", 0.80), ("tool_selection", 0.72),
+            ("architecture", 0.68), ("debugging", 0.72), ("refactoring", 0.76),
+            ("documentation", 0.80), ("testing", 0.78),
         ),
     ),
     "moonshotai.kimi-k2.5": ModelInfo(
@@ -234,6 +259,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.84), ("code_generation", 0.74), ("code_review", 0.70),
             ("conversation", 0.80), ("extraction", 0.83), ("reasoning", 0.72),
             ("summarization", 0.78), ("tool_selection", 0.72),
+            ("architecture", 0.66), ("debugging", 0.70), ("refactoring", 0.74),
+            ("documentation", 0.78), ("testing", 0.76),
         ),
     ),
     "openai.gpt-oss-120b-1:0": ModelInfo(
@@ -246,6 +273,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.87), ("code_generation", 0.76), ("code_review", 0.74),
             ("conversation", 0.81), ("extraction", 0.84), ("reasoning", 0.72),
             ("summarization", 0.83), ("tool_selection", 0.75),
+            ("architecture", 0.68), ("debugging", 0.72), ("refactoring", 0.76),
+            ("documentation", 0.80), ("testing", 0.78),
         ),
     ),
     "minimax.minimax-m2.1": ModelInfo(
@@ -257,6 +286,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.85), ("code_generation", 0.76), ("code_review", 0.72),
             ("conversation", 0.81), ("extraction", 0.85), ("reasoning", 0.70),
             ("summarization", 0.80), ("tool_selection", 0.77),
+            ("architecture", 0.66), ("debugging", 0.70), ("refactoring", 0.74),
+            ("documentation", 0.78), ("testing", 0.76),
         ),
     ),
     # ── Tier 3: Haiku / mini / small open-source ────────────────────
@@ -297,6 +328,8 @@ MODEL_CATALOG: dict[str, ModelInfo] = {
             ("classification", 0.68), ("code_generation", 0.32), ("code_review", 0.30),
             ("conversation", 0.60), ("extraction", 0.65), ("reasoning", 0.35),
             ("summarization", 0.58), ("tool_selection", 0.48),
+            ("architecture", 0.25), ("debugging", 0.28), ("refactoring", 0.32),
+            ("documentation", 0.50), ("testing", 0.42),
         ),
     ),
     "google.gemma-3-27b-it": ModelInfo(
