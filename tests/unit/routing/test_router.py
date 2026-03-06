@@ -830,3 +830,124 @@ class TestTier1Preservation:
         # Catch-all → no tier-1 preservation → BEST_VALUE picks Sonnet
         assert decision.selected_model == "claude-sonnet-4-6"
         assert decision.was_overridden is True
+
+
+class TestConfidenceWeightedPreservation:
+    """Confidence gates whether tier-1 preservation kicks in."""
+
+    ENTRIES = [
+        _make_entry("claude-opus-4-6", "architecture", avg_quality=0.95, avg_cost=0.045),
+        _make_entry("claude-sonnet-4-6", "architecture", avg_quality=0.68, avg_cost=0.009),
+    ]
+    POLICY = RoutingPolicy(
+        rules=[
+            RoutingRule(
+                task_type="architecture",
+                criteria=SelectionCriteria.BEST_VALUE,
+                min_quality=0.55,
+                fallback="claude-sonnet-4-6",
+            ),
+        ]
+    )
+
+    def test_high_confidence_preserves_opus(self) -> None:
+        cache = _make_cache(self.ENTRIES)
+        decision = resolve("architecture", "claude-opus-4-6", cache, self.POLICY, confidence=0.85)
+        assert decision.selected_model == "claude-opus-4-6"
+
+    def test_low_confidence_allows_downgrade(self) -> None:
+        cache = _make_cache(self.ENTRIES)
+        decision = resolve("architecture", "claude-opus-4-6", cache, self.POLICY, confidence=0.5)
+        # Low confidence → no preservation → BEST_VALUE picks Sonnet
+        assert decision.selected_model == "claude-sonnet-4-6"
+        assert decision.was_overridden is True
+
+    def test_none_confidence_backward_compat(self) -> None:
+        """None confidence treated as 1.0 — preserves Opus for backward compat."""
+        entries = [
+            _make_entry("claude-opus-4-6", "debugging", avg_quality=0.94, avg_cost=0.045),
+            _make_entry("claude-sonnet-4-6", "debugging", avg_quality=0.72, avg_cost=0.009),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="debugging",
+                    criteria=SelectionCriteria.BEST_VALUE,
+                    min_quality=0.55,
+                    fallback="claude-sonnet-4-6",
+                ),
+            ]
+        )
+        decision = resolve("debugging", "claude-opus-4-6", cache, policy, confidence=None)
+        assert decision.selected_model == "claude-opus-4-6"
+
+    def test_confidence_at_threshold_preserves(self) -> None:
+        """Exactly at threshold → preservation applies."""
+        entries = [
+            _make_entry("claude-opus-4-6", "code_generation", avg_quality=0.93, avg_cost=0.045),
+            _make_entry("claude-sonnet-4-6", "code_generation", avg_quality=0.76, avg_cost=0.009),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="code_generation",
+                    criteria=SelectionCriteria.BEST_VALUE,
+                    min_quality=0.55,
+                    fallback="claude-sonnet-4-6",
+                ),
+            ]
+        )
+        decision = resolve("code_generation", "claude-opus-4-6", cache, policy, confidence=0.7)
+        assert decision.selected_model == "claude-opus-4-6"
+
+    def test_custom_threshold_respected(self) -> None:
+        """Higher custom threshold means 0.8 confidence isn't enough."""
+        cache = _make_cache(self.ENTRIES)
+        decision = resolve(
+            "architecture", "claude-opus-4-6", cache, self.POLICY,
+            confidence=0.8, tier1_confidence_threshold=0.9,
+        )
+        assert decision.selected_model == "claude-sonnet-4-6"
+        assert decision.was_overridden is True
+
+    def test_easy_task_unaffected_by_confidence(self) -> None:
+        """High confidence on easy task → no preservation (preservation only for hard tasks)."""
+        entries = [
+            _make_entry("claude-opus-4-6", "classification", avg_quality=0.96, avg_cost=0.045),
+            _make_entry("claude-sonnet-4-6", "classification", avg_quality=0.88, avg_cost=0.009),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="classification",
+                    criteria=SelectionCriteria.BEST_VALUE,
+                    min_quality=0.55,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+        decision = resolve("classification", "claude-opus-4-6", cache, policy, confidence=0.99)
+        assert decision.selected_model == "claude-sonnet-4-6"
+
+    def test_non_tier1_unaffected_by_confidence(self) -> None:
+        """Sonnet (tier 2) on hard task with high confidence → no preservation."""
+        entries = [
+            _make_entry("claude-sonnet-4-6", "architecture", avg_quality=0.68, avg_cost=0.009),
+            _make_entry("claude-haiku-4-5-20251001", "architecture", avg_quality=0.30, avg_cost=0.0024),
+        ]
+        cache = _make_cache(entries)
+        policy = RoutingPolicy(
+            rules=[
+                RoutingRule(
+                    task_type="architecture",
+                    criteria=SelectionCriteria.BEST_VALUE,
+                    min_quality=0.55,
+                    fallback="claude-haiku-4-5-20251001",
+                ),
+            ]
+        )
+        decision = resolve("architecture", "claude-sonnet-4-6", cache, policy, confidence=0.95)
+        assert decision.selected_model == "claude-sonnet-4-6"

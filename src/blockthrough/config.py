@@ -74,6 +74,7 @@ class BlockThroughConfig(BaseSettings):
     routing_model_high: str = "claude-opus-4-6"
     routing_model_mid: str = "claude-sonnet-4-6"
     routing_model_low: str = "claude-haiku-4-5-20251001"
+    routing_tier1_confidence_threshold: float = 0.7
 
     # Alerts & Budgets
     alerts_enabled: bool = True

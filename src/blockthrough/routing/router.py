@@ -223,6 +223,8 @@ def resolve(
     *,
     has_tool_use: bool = False,
     allowed_models: set[str] | None = None,
+    confidence: float | None = None,
+    tier1_confidence_threshold: float = 0.7,
 ) -> RoutingDecision:
     """Make a routing decision for the given task type and policy.
 
@@ -258,14 +260,18 @@ def resolve(
         and not rule.is_catch_all
         and task_type in _HARD_TASK_VALUES
     ):
-        rule = RoutingRule(
-            task_type=rule.task_type,
-            criteria=SelectionCriteria.HIGHEST_QUALITY_UNDER_COST,
-            min_quality=max(rule.min_quality, 0.85),
-            max_cost_per_1k=None,
-            max_latency_ms=rule.max_latency_ms,
-            fallback=rule.fallback,
-        )
+        # None = no classifier ran; default to 1.0 so legacy callers
+        # get full preservation (proxy gate already filters low-confidence).
+        effective_confidence = confidence if confidence is not None else 1.0
+        if effective_confidence >= tier1_confidence_threshold:
+            rule = RoutingRule(
+                task_type=rule.task_type,
+                criteria=SelectionCriteria.HIGHEST_QUALITY_UNDER_COST,
+                min_quality=max(rule.min_quality, 0.85),
+                max_cost_per_1k=None,
+                max_latency_ms=rule.max_latency_ms,
+                fallback=rule.fallback,
+            )
 
     # Empty fitness matrix -- fall through to fallback
     if fitness_cache.is_empty:

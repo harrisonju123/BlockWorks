@@ -291,6 +291,8 @@ async def _maybe_route(
         policy=policy,
         has_tool_use=has_tool_use,
         allowed_models=allowed_models,
+        confidence=confidence,
+        tier1_confidence_threshold=get_config().routing_tier1_confidence_threshold,
     )
     decision.confidence = confidence
 
